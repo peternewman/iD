@@ -1,4 +1,3 @@
-
 // Returns true if a and b have the same elements at the same indices.
 export function utilArrayIdentical(a, b) {
     // an array is always identical to itself
@@ -22,6 +21,7 @@ export function utilArrayIdentical(a, b) {
 //   [1]
 // utilArrayDifference(b, a)
 //   [4]
+/** @template T @param {T[]} a @param {T[]} b @returns {T[]} */
 export function utilArrayDifference(a, b) {
     var other = new Set(b);
     return Array.from(new Set(a))
@@ -115,6 +115,12 @@ export function utilArrayGroupBy(a, key) {
 }
 
 
+/**
+ * @template T
+ * @param {T[]} a
+ * @param {string | ((item: T) => string)} key
+ * @returns {T[]}
+ */
 // Returns an Array with all the duplicates removed
 // where uniqueness determined by the given key
 // `key` can be passed as a property or as a key function

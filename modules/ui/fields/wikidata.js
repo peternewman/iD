@@ -1,22 +1,11 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
-
-import {
-    select as d3_select,
-    event as d3_event
-} from 'd3-selection';
-
-import { uiCombobox } from '../combobox';
+import { select as d3_select } from 'd3-selection';
 
 import { actionChangeTags } from '../../actions/change_tags';
 import { services } from '../../services/index';
-
 import { svgIcon } from '../../svg/icon';
-import {
-    utilGetSetValue,
-    utilNoAuto,
-    utilRebind
-} from '../../util';
-
+import { utilGetSetValue, utilNoAuto, utilRebind } from '../../util';
+import { uiCombobox } from '../combobox';
 import { t } from '../../core/localizer';
 
 
@@ -32,16 +21,16 @@ export function uiFieldWikidata(field, context) {
     var _entityIDs = [];
 
     var _wikipediaKey = field.keys && field.keys.find(function(key) {
-            return key.includes('wikipedia');
-        }),
-        _hintKey = field.key === 'wikidata' ? 'name' : field.key.split(':')[0];
+        return key.includes('wikipedia');
+    });
+    var _hintKey = field.key === 'wikidata' ? 'name' : field.key.split(':')[0];
 
     var combobox = uiCombobox(context, 'combo-' + field.safeid)
         .caseSensitive(true)
         .minItems(1);
 
-    function wiki(selection) {
 
+    function wiki(selection) {
         _selection = selection;
 
         var wrap = selection.selectAll('.form-field-input-wrap')
@@ -71,6 +60,7 @@ export function uiFieldWikidata(field, context) {
         searchRowEnter
             .append('input')
             .attr('type', 'text')
+            .attr('dir', 'auto')
             .attr('id', field.domId)
             .style('flex', '1')
             .call(utilNoAuto)
@@ -84,8 +74,10 @@ export function uiFieldWikidata(field, context) {
             .call(combobox.fetcher(fetchWikidataItems));
 
         combobox.on('accept', function(d) {
-            _qid = d.id;
-            change();
+            if (d) {
+                _qid = d.id;
+                change();
+            }
         }).on('cancel', function() {
             setLabelForEntity();
         });
@@ -94,9 +86,8 @@ export function uiFieldWikidata(field, context) {
             .append('button')
             .attr('class', 'form-field-button wiki-link')
             .attr('title', t('icons.view_on', { domain: 'wikidata.org' }))
-            .attr('tabindex', -1)
             .call(svgIcon('#iD-icon-out-link'))
-            .on('click', function() {
+            .on('click', function(d3_event) {
                 d3_event.preventDefault();
                 if (_wikiURL) window.open(_wikiURL, '_blank');
             });
@@ -116,13 +107,16 @@ export function uiFieldWikidata(field, context) {
             .attr('class', function(d) { return 'labeled-input preset-wikidata-' + d; });
 
         enter
-            .append('span')
+            .append('div')
             .attr('class', 'label')
-            .text(function(d) { return t('wikidata.' + d); });
+            .each(function(d) {
+                d3_select(this).call(t.addOrUpdate('wikidata.' + d));
+            });
 
         enter
             .append('input')
             .attr('type', 'text')
+            .attr('dir', 'auto')
             .call(utilNoAuto)
             .classed('disabled', 'true')
             .attr('readonly', 'true');
@@ -131,21 +125,18 @@ export function uiFieldWikidata(field, context) {
             .append('button')
             .attr('class', 'form-field-button')
             .attr('title', t('icons.copy'))
-            .attr('tabindex', -1)
             .call(svgIcon('#iD-operation-copy'))
-            .on('click', function() {
+            .on('click', function(d3_event) {
                 d3_event.preventDefault();
-                d3_select(this.parentNode)
+                const text = d3_select(this.parentNode)
                     .select('input')
-                    .node()
-                    .select();
-                document.execCommand('copy');
+                    .property('value');
+                navigator.clipboard.writeText(text);
             });
 
     }
 
     function fetchWikidataItems(q, callback) {
-
         if (!q && _hintKey) {
             // other tags may be good search terms
             for (var i in _entityIDs) {
@@ -158,14 +149,25 @@ export function uiFieldWikidata(field, context) {
         }
 
         wikidata.itemsForSearchQuery(q, function(err, data) {
-            if (err) return;
-
-            for (var i in data) {
-                data[i].value = data[i].label + ' (' +  data[i].id + ')';
-                data[i].title = data[i].description;
+            if (err) {
+                if (err !== 'No query') console.error(err); // eslint-disable-line
+                return;
             }
 
-            if (callback) callback(data);
+            var result = data.map(function (item) {
+                return {
+                    id: item.id,
+                    value: item.display.label.value + ' (' + item.id + ')',
+                    display: selection => selection.append('span')
+                        .attr('class', 'localized-text')
+                        .attr('lang', item.display.label.language)
+                        .text(item.display.label.value),
+                    title: item.display.description && item.display.description.value,
+                    terms: item.aliases
+                };
+            });
+
+            if (callback) callback(result);
         });
     }
 
@@ -207,7 +209,7 @@ export function uiFieldWikidata(field, context) {
                 var foundPreferred;
                 for (var i in langs) {
                     var lang = langs[i];
-                    var siteID = lang.replace('-', '_') + 'wiki';
+                    var siteID = lang.replaceAll('-', '_') + 'wiki';
                     if (entity.sitelinks[siteID]) {
                         foundPreferred = true;
                         newWikipediaValue = lang + ':' + entity.sitelinks[siteID].title;
@@ -228,7 +230,7 @@ export function uiFieldWikidata(field, context) {
                         // if no wikipedia pages are linked to this wikidata entity, delete that tag
                         newWikipediaValue = null;
                     } else {
-                        var wikiLang = wikiSiteKeys[0].slice(0, -4).replace('_', '-');
+                        var wikiLang = wikiSiteKeys[0].slice(0, -4).replaceAll('_', '-');
                         var wikiTitle = entity.sitelinks[wikiSiteKeys[0]].title;
                         newWikipediaValue = wikiLang + ':' + wikiTitle;
                     }
@@ -243,11 +245,11 @@ export function uiFieldWikidata(field, context) {
 
             var actions = initEntityIDs.map(function(entityID) {
                 var entity = context.hasEntity(entityID);
-                if (!entity) return;
+                if (!entity) return null;
 
                 var currTags = Object.assign({}, entity.tags);  // shallow copy
                 if (newWikipediaValue === null) {
-                    if (!currTags[_wikipediaKey]) return;
+                    if (!currTags[_wikipediaKey]) return null;
 
                     delete currTags[_wikipediaKey];
                 } else {
@@ -260,7 +262,7 @@ export function uiFieldWikidata(field, context) {
             if (!actions.length) return;
 
             // Coalesce the update of wikidata tag into the previous tag change
-            context.overwrite(
+            context.replace(
                 function actionUpdateWikipediaTags(graph) {
                     actions.forEach(function(action) {
                         graph = action(graph);
@@ -276,14 +278,17 @@ export function uiFieldWikidata(field, context) {
     }
 
     function setLabelForEntity() {
-        var label = '';
+        var label = {
+          value: ''
+        };
         if (_wikidataEntity) {
             label = entityPropertyForDisplay(_wikidataEntity, 'labels');
-            if (label.length === 0) {
-                label = _wikidataEntity.id.toString();
+            if (label.value.length === 0) {
+                label.value = _wikidataEntity.id.toString();
             }
         }
-        utilGetSetValue(_searchInput, label);
+        utilGetSetValue(_searchInput, label.value)
+            .attr('lang', label.language);
     }
 
 
@@ -320,10 +325,11 @@ export function uiFieldWikidata(field, context) {
 
             _selection.select('.preset-wikidata-description')
                 .style('display', function(){
-                    return description.length > 0 ? 'flex' : 'none';
+                    return description.value.length > 0 ? 'flex' : 'none';
                 })
                 .select('input')
-                .attr('value', description);
+                .attr('value', description.value)
+                .attr('lang', description.language);
 
             _selection.select('.preset-wikidata-identifier')
                 .style('display', function(){
@@ -356,19 +362,20 @@ export function uiFieldWikidata(field, context) {
     };
 
     function entityPropertyForDisplay(wikidataEntity, propKey) {
-        if (!wikidataEntity[propKey]) return '';
+        var blankResponse = { value: '' };
+        if (!wikidataEntity[propKey]) return blankResponse;
         var propObj = wikidataEntity[propKey];
         var langKeys = Object.keys(propObj);
-        if (langKeys.length === 0) return '';
+        if (langKeys.length === 0) return blankResponse;
         // sorted by priority, since we want to show the user's language first if possible
         var langs = wikidata.languagesToQuery();
         for (var i in langs) {
             var lang = langs[i];
             var valueObj = propObj[lang];
-            if (valueObj && valueObj.value && valueObj.value.length > 0) return valueObj.value;
+            if (valueObj && valueObj.value && valueObj.value.length > 0) return valueObj;
         }
         // default to any available value
-        return propObj[langKeys[0]].value;
+        return propObj[langKeys[0]];
     }
 
 

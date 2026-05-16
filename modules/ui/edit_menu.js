@@ -1,10 +1,12 @@
-import { event as d3_event, select as d3_select } from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 import { dispatch as d3_dispatch } from 'd3-dispatch';
 
 import { geoVecAdd } from '../geo';
 import { localizer } from '../core/localizer';
 import { uiTooltip } from './tooltip';
 import { utilRebind } from '../util/rebind';
+import { utilHighlightEntities } from '../util/util';
+import { utilGetDimensions } from '../util/dimensions';
 import { svgIcon } from '../svg/icon';
 
 
@@ -86,15 +88,36 @@ export function uiEditMenu(context) {
             .on('click', click)
             // don't listen for `mouseup` because we only care about non-mouse pointer types
             .on('pointerup', pointerup)
-            .on('pointerdown mousedown', function pointerdown() {
+            .on('pointerdown mousedown', function pointerdown(d3_event) {
                 // don't let button presses also act as map input - #1869
                 d3_event.stopPropagation();
+            })
+            .on('mouseenter.highlight', function(d3_event, d) {
+                if (d3_select(this).classed('disabled')) return;
+
+                if (d.relatedEntityIds) {
+                    utilHighlightEntities(d.relatedEntityIds(), true, context);
+                }
+
+                if (d.getAuxiliaryGeometry) {
+                    drawAuxiliaryGeometry(context, d.getAuxiliaryGeometry());
+                }
+            })
+            .on('mouseleave.highlight', function(d3_event, d) {
+                if (d.relatedEntityIds) {
+                    utilHighlightEntities(d.relatedEntityIds(), false, context);
+                }
+
+                if (d.getAuxiliaryGeometry) {
+                    drawAuxiliaryGeometry(context, []);
+                }
             });
 
         buttonsEnter.each(function(d) {
             var tooltip = uiTooltip()
-                .heading(d.title)
-                .title(d.tooltip())
+                .scrollContainer(context.container().select('.over-map'))
+                .heading(() => d.title)
+                .title(d.tooltip)
                 .keys([d.keys[0]]);
 
             _tooltips.push(tooltip);
@@ -103,19 +126,19 @@ export function uiEditMenu(context) {
                 .call(tooltip)
                 .append('div')
                 .attr('class', 'icon-wrap')
-                .call(svgIcon('#iD-operation-' + d.id, 'operation'));
+                .call(svgIcon(d.icon && d.icon() || '#iD-operation-' + d.id, 'operation'));
         });
 
         if (showLabels) {
             buttonsEnter.append('span')
                 .attr('class', 'label')
-                .text(function(d) {
-                    return d.title;
+                .each(function(d) {
+                    d3_select(this).call(d.title);
                 });
         }
 
         // update
-        buttons = buttonsEnter
+        buttonsEnter
             .merge(buttons)
             .classed('disabled', function(d) { return d.disabled(); });
 
@@ -134,12 +157,17 @@ export function uiEditMenu(context) {
 
         var lastPointerUpType;
         // `pointerup` is always called before `click`
-        function pointerup() {
+        function pointerup(d3_event) {
             lastPointerUpType = d3_event.pointerType;
         }
 
-        function click(operation) {
+        function click(d3_event, operation) {
             d3_event.stopPropagation();
+
+            if (operation.relatedEntityIds) {
+                utilHighlightEntities(operation.relatedEntityIds(), false, context);
+            }
+
             if (operation.disabled()) {
                 if (lastPointerUpType === 'touch' ||
                     lastPointerUpType === 'pen') {
@@ -148,7 +176,7 @@ export function uiEditMenu(context) {
                         .duration(4000)
                         .iconName('#iD-operation-' + operation.id)
                         .iconClass('operation disabled')
-                        .text(operation.tooltip)();
+                        .label(operation.tooltip())();
                 }
             } else {
                 if (lastPointerUpType === 'touch' ||
@@ -157,7 +185,7 @@ export function uiEditMenu(context) {
                         .duration(2000)
                         .iconName('#iD-operation-' + operation.id)
                         .iconClass('operation')
-                        .text(operation.annotation() || operation.title)();
+                        .label(operation.annotation() || operation.title)();
                 }
 
                 operation();
@@ -210,6 +238,9 @@ export function uiEditMenu(context) {
         }
 
         var origin = geoVecAdd(anchorLoc, offset);
+        // repositioning the menu to account for the top menu height
+        var _verticalOffset = parseFloat(utilGetDimensions(d3_select('.top-toolbar-wrap'))[1]);
+        origin[1] -= _verticalOffset;
 
         _menu
             .style('left', origin[0] + 'px')
@@ -276,6 +307,9 @@ export function uiEditMenu(context) {
         _menu.remove();
         _tooltips = [];
 
+        // Clean up any auxiliary overlays
+        drawAuxiliaryGeometry(context, []);
+
         dispatch.call('toggled', this, false);
     };
 
@@ -299,4 +333,22 @@ export function uiEditMenu(context) {
     };
 
     return utilRebind(editMenu, dispatch, 'on');
+}
+
+
+// Helper function to draw/remove reflect axis overlay
+function drawAuxiliaryGeometry(context, d) {
+    const surface = context.surface();
+    // Append to the OSM data layer to be in the same coordinate space as map features
+    const container = surface.selectAll('.data-layer.osm .auxiliary');
+    const paths = container.selectAll('path')
+        .data(d, d => d.id);
+
+    paths.exit().remove();
+    const enter = paths.enter()
+        .append('path');
+
+    enter.merge(paths)
+        .attr('class', d => d.klass)
+        .attr('d', d => d.path);
 }

@@ -1,25 +1,26 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 import {
     select as d3_select
 } from 'd3-selection';
 
-//import { actionNoop } from '../actions/noop';
 import { geoSphericalDistance } from '../../geo';
 import { svgIcon } from '../../svg/icon';
 import { prefs } from '../../core/preferences';
 import { t } from '../../core/localizer';
 import { utilHighlightEntities } from '../../util';
 import { uiSection } from '../section';
+import { validationIssue } from '../../core/validation';
+import { sortBy } from 'es-toolkit';
 
 export function uiSectionValidationIssues(id, severity, context) {
 
     var _issues = [];
 
     var section = uiSection(id, context)
-        .title(function() {
+        .label(function() {
             if (!_issues) return '';
             var issueCountText = _issues.length > 1000 ? '1000+' : String(_issues.length);
-            return t('issues.' + severity + 's.list_title', { count: issueCountText });
+            return t.append('inspector.title_count', { title: t.append('issues.' + severity + 's.list_title'), count: issueCountText });
         })
         .disclosureContent(renderDisclosureContent)
         .shouldDisplay(function() {
@@ -39,22 +40,27 @@ export function uiSectionValidationIssues(id, severity, context) {
     }
 
     function renderDisclosureContent(selection) {
-
-        var center = context.map().center();
-        var graph = context.graph();
-
-        // sort issues by distance away from the center of the map
-        var issues = _issues.map(function withDistance(issue) {
-                var extent = issue.extent(graph);
-                var dist = extent ? geoSphericalDistance(center, extent.center()) : 0;
-                return Object.assign(issue, { dist: dist });
-            })
-            .sort(function byDistance(a, b) {
-                return a.dist - b.dist;
-            });
-
-        // cut off at 1000
-        issues = issues.slice(0, 1000);
+        // sort by the same order the rules are listed in the section below:
+        // first by the issue's rule type (alphabetically by localized title),
+        // then issue's internal subtype, and only then by distance from map center
+        // finally: cut off at a maximum 1000 entries
+        const center = context.map().center();
+        const graph = context.graph();
+        const rules = sortBy(context.validator().getRuleKeys().filter(key => key !== 'maprules'), [
+            rule => t(`issues.${rule}.title`)
+        ]);
+        const withDistance = _issues.map(issue => {
+            const extent = issue.extent(graph);
+            return {
+                ...issue,
+                dist: extent ? geoSphericalDistance(center, extent.center()) : 0
+            };
+        });
+        const issues = sortBy(withDistance, [
+            issue => rules.indexOf(issue.type),
+            'subtype',
+            'dist'
+        ]).slice(0, 1000);
 
         //renderIgnoredIssuesReset(_warningsSelection);
 
@@ -73,7 +79,7 @@ export function uiSectionValidationIssues(id, severity, context) {
 
 
         var items = list.selectAll('li')
-            .data(issues, function(d) { return d.id; });
+            .data(issues, function(d) { return d.key; });
 
         // Exit
         items.exit()
@@ -82,21 +88,20 @@ export function uiSectionValidationIssues(id, severity, context) {
         // Enter
         var itemsEnter = items.enter()
             .append('li')
-            .attr('class', function (d) { return 'issue severity-' + d.severity; })
-            .on('click', function(d) {
-                context.validator().focusIssue(d);
-            })
-            .on('mouseover', function(d) {
-                utilHighlightEntities(d.entityIds, true, context);
-            })
-            .on('mouseout', function(d) {
-                utilHighlightEntities(d.entityIds, false, context);
-            });
-
+            .attr('class', function (d) { return 'issue severity-' + d.severity; });
 
         var labelsEnter = itemsEnter
-            .append('div')
-            .attr('class', 'issue-label');
+            .append('button')
+            .attr('class', 'issue-label')
+            .on('click', function(d3_event, d) {
+                context.validator().focusIssue(d);
+            })
+            .on('mouseover', function(d3_event, d) {
+                utilHighlightEntities(d.entityIds, true, context);
+            })
+            .on('mouseout', function(d3_event, d) {
+                utilHighlightEntities(d.entityIds, false, context);
+            });
 
         var textEnter = labelsEnter
             .append('span')
@@ -106,40 +111,13 @@ export function uiSectionValidationIssues(id, severity, context) {
             .append('span')
             .attr('class', 'issue-icon')
             .each(function(d) {
-                var iconName = '#iD-icon-' + (d.severity === 'warning' ? 'alert' : 'error');
                 d3_select(this)
-                    .call(svgIcon(iconName));
+                    .call(svgIcon(validationIssue.ICONS[d.severity]));
             });
 
         textEnter
             .append('span')
             .attr('class', 'issue-message');
-
-        /*
-        labelsEnter
-            .append('span')
-            .attr('class', 'issue-autofix')
-            .each(function(d) {
-                if (!d.autoFix) return;
-
-                d3_select(this)
-                    .append('button')
-                    .attr('title', t('issues.fix_one.title'))
-                    .datum(d.autoFix)  // set button datum to the autofix
-                    .attr('class', 'autofix action')
-                    .on('click', function(d) {
-                        d3_event.preventDefault();
-                        d3_event.stopPropagation();
-
-                        var issuesEntityIDs = d.issue.entityIds;
-                        utilHighlightEntities(issuesEntityIDs.concat(d.entityIds), false, context);
-
-                        context.perform.apply(context, d.autoArgs);
-                        context.validator().validate();
-                    })
-                    .call(svgIcon('#iD-icon-wrench'));
-            });
-        */
 
         // Update
         items = items
@@ -147,65 +125,10 @@ export function uiSectionValidationIssues(id, severity, context) {
             .order();
 
         items.selectAll('.issue-message')
-            .text(function(d) {
-                return d.message(context);
+            .text('')
+            .each(function(d) {
+                return d.message(context)(d3_select(this));
             });
-
-        /*
-        // autofix
-        var canAutoFix = issues.filter(function(issue) { return issue.autoFix; });
-
-        var autoFixAll = selection.selectAll('.autofix-all')
-            .data(canAutoFix.length ? [0] : []);
-
-        // exit
-        autoFixAll.exit()
-            .remove();
-
-        // enter
-        var autoFixAllEnter = autoFixAll.enter()
-            .insert('div', '.issues-list')
-            .attr('class', 'autofix-all');
-
-        var linkEnter = autoFixAllEnter
-            .append('a')
-            .attr('class', 'autofix-all-link')
-            .attr('href', '#');
-
-        linkEnter
-            .append('span')
-            .attr('class', 'autofix-all-link-text')
-            .text(t('issues.fix_all.title'));
-
-        linkEnter
-            .append('span')
-            .attr('class', 'autofix-all-link-icon')
-            .call(svgIcon('#iD-icon-wrench'));
-
-        if (severity === 'warning') {
-            renderIgnoredIssuesReset(selection);
-        }
-
-        // update
-        autoFixAll = autoFixAll
-            .merge(autoFixAllEnter);
-
-        autoFixAll.selectAll('.autofix-all-link')
-            .on('click', function() {
-                context.pauseChangeDispatch();
-                context.perform(actionNoop());
-                canAutoFix.forEach(function(issue) {
-                    var args = issue.autoFix.autoArgs.slice();  // copy
-                    if (typeof args[args.length - 1] !== 'function') {
-                        args.pop();
-                    }
-                    args.push(t('issues.fix_all.annotation'));
-                    context.replace.apply(context, args);
-                });
-                context.resumeChangeDispatch();
-                context.validator().validate();
-            });
-        */
     }
 
     context.validator().on('validated.uiSectionValidationIssues' + id, function() {
@@ -216,7 +139,7 @@ export function uiSectionValidationIssues(id, severity, context) {
     });
 
     context.map().on('move.uiSectionValidationIssues' + id,
-        _debounce(function() {
+        debounce(function() {
             window.requestIdleCallback(function() {
                 if (getOptions().where === 'visible') {
                     // must refetch issues if they are viewport-dependent

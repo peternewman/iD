@@ -1,3 +1,5 @@
+import { select as d3_select } from 'd3-selection';
+
 import { t } from '../core/localizer';
 import { svgIcon } from '../svg/icon';
 import { uiTooltip } from './tooltip';
@@ -11,7 +13,15 @@ export function uiCommitWarnings(context) {
             .getIssuesBySeverity({ what: 'edited', where: 'all', includeDisabledRules: true });
 
         for (var severity in issuesBySeverity) {
+            // don't show suggestions on the changeset page
+            if (severity === 'suggestion') continue;
+
             var issues = issuesBySeverity[severity];
+
+            if (severity !== 'error') {      // exclude 'fixme' and similar - #8603
+                issues = issues.filter(function(issue) { return issue.type !== 'help_request'; });
+            }
+
             var section = severity + '-section';
             var issueItem = severity + '-item';
 
@@ -27,7 +37,7 @@ export function uiCommitWarnings(context) {
 
             containerEnter
                 .append('h3')
-                .text(severity === 'warning' ? t('commit.warnings') : t('commit.errors'));
+                .call(t.append(`commit.${severity}s`));
 
             containerEnter
                 .append('ul')
@@ -38,7 +48,7 @@ export function uiCommitWarnings(context) {
 
 
             var items = container.select('ul').selectAll('li')
-                .data(issues, function(d) { return d.id; });
+                .data(issues, function(d) { return d.key; });
 
             items.exit()
                 .remove();
@@ -47,29 +57,9 @@ export function uiCommitWarnings(context) {
                 .append('li')
                 .attr('class', issueItem);
 
-            itemsEnter
-                .call(svgIcon('#iD-icon-alert', 'pre-text'));
-
-            itemsEnter
-                .append('strong')
-                .attr('class', 'issue-message');
-
-            itemsEnter.filter(function(d) { return d.tooltip; })
-                .call(uiTooltip()
-                    .title(function(d) { return d.tooltip; })
-                    .placement('top')
-                );
-
-            items = itemsEnter
-                .merge(items);
-
-            items.selectAll('.issue-message')
-                .text(function(d) {
-                    return d.message(context);
-                });
-
-            items
-                .on('mouseover', function(d) {
+            var buttons = itemsEnter
+                .append('button')
+                .on('mouseover', function(d3_event, d) {
                     if (d.entityIds) {
                         context.surface().selectAll(
                             utilEntityOrMemberSelector(
@@ -83,8 +73,30 @@ export function uiCommitWarnings(context) {
                     context.surface().selectAll('.hover')
                         .classed('hover', false);
                 })
-                .on('click', function(d) {
+                .on('click', function(d3_event, d) {
                     context.validator().focusIssue(d);
+                });
+
+            buttons
+                .call(svgIcon('#iD-icon-alert', 'pre-text'));
+
+            buttons
+                .append('strong')
+                .attr('class', 'issue-message');
+
+            buttons.filter(function(d) { return d.tooltip; })
+                .call(uiTooltip()
+                    .title(function(d) { return d.tooltip; })
+                    .placement('top')
+                );
+
+            items = itemsEnter
+                .merge(items);
+
+            items.selectAll('.issue-message')
+                .text('')
+                .each(function(d) {
+                    return d.message(context)(d3_select(this));
                 });
         }
     }

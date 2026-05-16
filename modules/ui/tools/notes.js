@@ -1,4 +1,4 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 
 import { select as d3_select } from 'd3-selection';
 
@@ -15,7 +15,7 @@ export function uiToolNotes(context) {
 
     var tool = {
         id: 'notes',
-        label: t('modes.add_note.label')
+        label: t.append('modes.add_note.label')
     };
 
     var mode = modeAddNote(context);
@@ -34,8 +34,10 @@ export function uiToolNotes(context) {
         return context.map().notesEditable() && mode && mode.id !== 'save';
     }
 
-    context.keybinding().on(mode.key, function() {
-        if (!enabled(mode)) return;
+    context.keybinding().on(mode.key, function(d3_event) {
+        if (!enabled()) return;
+
+        d3_event.preventDefault();
 
         if (mode.id === context.mode().id) {
             context.enter(modeBrowse(context));
@@ -46,8 +48,7 @@ export function uiToolNotes(context) {
 
     tool.render = function(selection) {
 
-
-        var debouncedUpdate = _debounce(update, 500, { leading: true, trailing: true });
+        var debouncedUpdate = debounce(update, 500, { leading: true, trailing: true });
 
         context.map()
             .on('move.notes', debouncedUpdate)
@@ -73,10 +74,9 @@ export function uiToolNotes(context) {
             // enter
             var buttonsEnter = buttons.enter()
                 .append('button')
-                .attr('tabindex', -1)
                 .attr('class', function(d) { return d.id + ' add-button bar-button'; })
-                .on('click.notes', function(d) {
-                    if (!enabled(d)) return;
+                .on('click.notes', function(d3_event, d) {
+                    if (!enabled()) return;
 
                     // When drawing, ignore accidental clicks on mode buttons - #4042
                     var currMode = context.mode().id;
@@ -107,10 +107,12 @@ export function uiToolNotes(context) {
             }
 
             // update
-            buttons = buttons
+            buttons
                 .merge(buttonsEnter)
-                .classed('disabled', function(d) { return !enabled(d); })
-                .classed('active', function(d) { return context.mode() && context.mode().button === d.button; });
+                .classed('disabled', function() { return !enabled(); })
+                .attr('aria-disabled', function() { return !enabled(); })
+                .classed('active', function(d) { return context.mode() && context.mode().button === d.button; })
+                .attr('aria-pressed', function(d) { return context.mode() && context.mode().button === d.button; });
         }
     };
 

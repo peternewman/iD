@@ -1,3 +1,6 @@
+import { fn } from '@vitest/spy';
+import { setTimeout } from 'node:timers/promises';
+
 describe('iD.svgData', function () {
     var context;
     var surface;
@@ -22,7 +25,11 @@ describe('iD.svgData', function () {
         '        "area": 19717.8,' +
         '        "name": "New Jersey",' +
         '        "name_en": "New Jersey",' +
-        '        "osm_id": 316973311' +
+        '        "osm_id": 316973311,' +
+        '        "flag": true,' +
+        '        "list": [1,2,3],' +
+        '        "null": null,' +
+        '        "object": {}' +
         '      },' +
         '      "id": 316973311' +
         '    }' +
@@ -71,8 +78,6 @@ describe('iD.svgData', function () {
         '</Document>' +
         '</kml>';
 
-
-    // this is because PhantomJS hasn't implemented a proper File constructor
     function makeFile(contents, fileName, mimeType) {
         var blob = new Blob([contents], { type: mimeType });
         blob.lastModifiedDate = new Date();
@@ -81,7 +86,7 @@ describe('iD.svgData', function () {
     }
 
     beforeEach(function () {
-        context = iD.coreContext().init();
+        context = iD.coreContext().assetPath('../dist/').init();
         d3.select(document.createElement('div'))
             .attr('class', 'main-map')
             .call(context.map().centerZoom([-74.389286, 40.1502754], 17));
@@ -112,67 +117,66 @@ describe('iD.svgData', function () {
     });
 
     describe('#fileList', function() {
-        it('handles gpx files', function (done) {
+        it('handles gpx files', async () => {
             var files = [ makeFile(gpx, 'test.gpx', 'application/gpx+xml') ];
             var render = iD.svgData(projection, context, dispatch);
-            var spy = sinon.spy();
+            const spy = fn();
             dispatch.on('change', spy);
             render.fileList(files);
 
-            window.setTimeout(function() {
-                expect(spy).to.have.been.calledOnce;
-                surface.call(render);
-                var path;
-                path = surface.selectAll('path.shadow');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                path = surface.selectAll('path.stroke');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                done();
-            }, 200);
+            await setTimeout(200);
+            expect(spy).to.have.been.calledOnce;
+            surface.call(render);
+            var path;
+            path = surface.selectAll('path.shadow');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
+            path = surface.selectAll('path.stroke');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
         });
 
-        it('handles kml files', function (done) {
+        it('handles kml files', async () => {
             var files = [ makeFile(kml, 'test.kml', 'application/vnd.google-earth.kml+xml') ];
             var render = iD.svgData(projection, context, dispatch);
-            var spy = sinon.spy();
+            const spy = fn();
             dispatch.on('change', spy);
             render.fileList(files);
 
-            window.setTimeout(function() {
-                expect(spy).to.have.been.calledOnce;
-                surface.call(render);
-                var path;
-                path = surface.selectAll('path.shadow');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                path = surface.selectAll('path.stroke');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                done();
-            }, 200);
+            await setTimeout(200);
+            expect(spy).to.have.been.calledOnce;
+            surface.call(render);
+            var path;
+            path = surface.selectAll('path.shadow');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
+            path = surface.selectAll('path.stroke');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
         });
 
-        it('handles geojson files', function (done) {
+        it('handles geojson files', async () => {
             var files = [ makeFile(geojson, 'test.geojson', 'application/vnd.geo+json') ];
             var render = iD.svgData(projection, context, dispatch);
-            var spy = sinon.spy();
+            const spy = fn();
             dispatch.on('change', spy);
             render.fileList(files);
 
-            window.setTimeout(function() {
-                expect(spy).to.have.been.calledOnce;
-                surface.call(render);
-                var path;
-                path = surface.selectAll('path.shadow');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                path = surface.selectAll('path.stroke');
-                expect(path.nodes().length).to.eql(1);
-                expect(path.attr('d')).to.match(/^M.*z$/);
-                done();
-            }, 200);
+            await setTimeout(200);
+            expect(spy).to.have.been.calledOnce;
+            surface.call(render);
+            var path;
+            path = surface.selectAll('path.shadow');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
+            path = surface.selectAll('path.stroke');
+            expect(path.nodes().length).to.eql(1);
+            expect(path.attr('d')).to.match(/^M.*z$/);
+            expect(render.geojson().features[0].properties.osm_id).to.be.a('string');
+            expect(render.geojson().features[0].properties.flag).to.be.a('string');
+            expect(render.geojson().features[0].properties.list).to.be.a('string');
+            expect(render.geojson().features[0].properties.null).to.be.a('string');
+            expect(render.geojson().features[0].properties.object).to.be.a('string');
         });
     });
 

@@ -1,4 +1,4 @@
-import { event as d3_event, select as d3_select } from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 import { utilFunctor } from '../util/util';
 
 var _popoverID = 0;
@@ -105,6 +105,8 @@ export function uiPopover(klass) {
             .on(_pointerPrefix + 'leave.popover', null)
             .on(_pointerPrefix + 'up.popover', null)
             .on(_pointerPrefix + 'down.popover', null)
+            .on('focus.popover', null)
+            .on('blur.popover', null)
             .on('click.popover', null)
             .attr('title', function() {
                 return this.getAttribute('data-original-title') || this.getAttribute('title');
@@ -150,7 +152,7 @@ export function uiPopover(klass) {
 
         if (display === 'hover') {
             var _lastNonMouseEnterTime;
-            anchor.on(_pointerPrefix + 'enter.popover', function() {
+            anchor.on(_pointerPrefix + 'enter.popover', function(d3_event) {
 
                 if (d3_event.pointerType) {
                     if (d3_event.pointerType !== 'mouse') {
@@ -171,24 +173,32 @@ export function uiPopover(klass) {
                 if (d3_event.buttons !== 0) return;
 
                 show.apply(this, arguments);
-            });
-            anchor.on(_pointerPrefix + 'leave.popover', function() {
+            })
+            .on(_pointerPrefix + 'leave.popover', function() {
+                hide.apply(this, arguments);
+            })
+            // show on focus too for better keyboard navigation support
+            .on('focus.popover', function() {
+                show.apply(this, arguments);
+            })
+            .on('blur.popover', function() {
                 hide.apply(this, arguments);
             });
 
         } else if (display === 'clickFocus') {
             anchor
-                .on(_pointerPrefix + 'down.popover', function() {
+                .on(_pointerPrefix + 'down.popover', function(d3_event) {
                     d3_event.preventDefault();
                     d3_event.stopPropagation();
                 })
-                .on(_pointerPrefix + 'up.popover', function() {
+                .on(_pointerPrefix + 'up.popover', function(d3_event) {
                     d3_event.preventDefault();
                     d3_event.stopPropagation();
                 })
                 .on('click.popover', toggle);
 
             popoverSelection
+                // This attribute lets the popover take focus
                 .attr('tabindex', 0)
                 .on('blur.popover', function() {
                     anchor.each(function() {
@@ -294,26 +304,43 @@ export function uiPopover(klass) {
         }
 
         if (position) {
+            if (scrollNode) {
+                const MIN_MARGIN = 10;
+                const popoverRect = popoverSelection.node().getBoundingClientRect();
+                const scrollNodeRect = scrollNode.getBoundingClientRect();
+                const arrow = anchor.selectAll('.popover-' + _id + ' > .popover-arrow');
 
-            if (scrollNode && (placement === 'top' || placement === 'bottom')) {
+                if (placement === 'top' || placement === 'bottom') {
+                    const initialPosX = position.x;
+                    if (popoverRect.right > scrollNodeRect.right - MIN_MARGIN) {
+                        position.x -= popoverRect.right - (scrollNodeRect.right - MIN_MARGIN);
+                    } else if (popoverRect.left < scrollNodeRect.left) {
+                        position.x += (scrollNodeRect.left + MIN_MARGIN) - popoverRect.left;
+                    }
+                    // keep the arrow centered on the button, or as close as possible
+                    const arrowPosX = Math.min(Math.max(popoverFrame.w / 2 - (position.x - initialPosX), MIN_MARGIN), popoverFrame.w - MIN_MARGIN);
+                    arrow.style('left', ~~arrowPosX + 'px');
 
-                var initialPosX = position.x;
-
-                if (position.x + popoverFrame.w > scrollNode.offsetWidth - 10) {
-                    position.x = scrollNode.offsetWidth - 10 - popoverFrame.w;
-                } else if (position.x < 10) {
-                    position.x = 10;
+                } else if (placement === 'left' || placement === 'right') {
+                    const initialPosY = position.y;
+                    if (popoverRect.bottom > scrollNodeRect.bottom - MIN_MARGIN) {
+                        position.y -= popoverRect.bottom - (scrollNodeRect.bottom - MIN_MARGIN);
+                    } else if (popoverRect.top < scrollNodeRect.top + MIN_MARGIN) {
+                        position.y += (scrollNodeRect.top + MIN_MARGIN) - popoverRect.top;
+                    }
+                    // keep the arrow centered on the button, or as close as possible
+                    const arrowPosY = Math.min(Math.max(popoverFrame.h / 2 - (position.y - initialPosY), MIN_MARGIN), popoverFrame.h - MIN_MARGIN);
+                    arrow.style('top', ~~arrowPosY + 'px');
                 }
-
-                var arrow = anchor.selectAll('.popover-' + _id + ' > .popover-arrow');
-                // keep the arrow centered on the button, or as close as possible
-                var arrowPosX = Math.min(Math.max(popoverFrame.w / 2 - (position.x - initialPosX), 10), popoverFrame.w - 10);
-                arrow.style('left', ~~arrowPosX + 'px');
             }
 
-            popoverSelection.style('left', ~~position.x + 'px').style('top', ~~position.y + 'px');
+            popoverSelection
+                .style('left', ~~position.x + 'px')
+                .style('top', ~~position.y + 'px');
         } else {
-            popoverSelection.style('left', null).style('top', null);
+            popoverSelection
+                .style('left', null)
+                .style('top', null);
         }
 
         function getFrame(node) {

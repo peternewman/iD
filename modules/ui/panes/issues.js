@@ -1,4 +1,3 @@
-
 import { t } from '../../core/localizer';
 import { uiPane } from '../pane';
 
@@ -11,14 +10,15 @@ export function uiPaneIssues(context) {
 
     var issuesPane = uiPane('issues', context)
         .key(t('issues.key'))
-        .title(t('issues.title'))
-        .description(t('issues.title'))
+        .label(t.append('issues.title'))
+        .description(t.append('issues.title'))
         .iconName('iD-icon-alert')
         .sections([
             uiSectionValidationOptions(context),
             uiSectionValidationStatus(context),
             uiSectionValidationIssues('issues-errors', 'error', context),
             uiSectionValidationIssues('issues-warnings', 'warning', context),
+            uiSectionValidationIssues('issues-suggestions', 'suggestion', context),
             uiSectionValidationRules(context)
         ]);
 

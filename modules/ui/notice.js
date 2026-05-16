@@ -1,6 +1,4 @@
-import _debounce from 'lodash-es/debounce';
-
-import { event as d3_event } from 'd3-selection';
+import { debounce } from 'es-toolkit/compat';
 
 import { t } from '../core/localizer';
 import { svgIcon } from '../svg/index';
@@ -19,7 +17,7 @@ export function uiNotice(context) {
             .on('click', function() {
                 context.map().zoomEase(context.minEditableZoom());
             })
-            .on('wheel', function() {   // let wheel events pass through #4482
+            .on('wheel', function(d3_event) {   // let wheel events pass through #4482
                 var e2 = new WheelEvent(d3_event.type, d3_event);
                 context.surface().node().dispatchEvent(e2);
             });
@@ -28,7 +26,7 @@ export function uiNotice(context) {
             .call(svgIcon('#iD-icon-plus', 'pre-text'))
             .append('span')
             .attr('class', 'label')
-            .text(t('zoom_in_edit'));
+            .call(t.append('zoom_in_edit'));
 
 
         function disableTooHigh() {
@@ -37,7 +35,7 @@ export function uiNotice(context) {
         }
 
         context.map()
-            .on('move.notice', _debounce(disableTooHigh, 500));
+            .on('move.notice', debounce(disableTooHigh, 500));
 
         disableTooHigh();
     };

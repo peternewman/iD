@@ -1,9 +1,10 @@
 import { select as d3_select } from 'd3-selection';
 
 import { prefs } from '../core/preferences';
-import { t, localizer } from '../core/localizer';
+import { t } from '../core/localizer';
 import { svgIcon } from '../svg/icon';
 import { services } from '../services';
+import { localeDateString } from '../util/date';
 
 
 export function uiNoteComments() {
@@ -51,24 +52,32 @@ export function uiNoteComments() {
                         .append('a')
                         .attr('class', 'comment-author-link')
                         .attr('href', osm.userURL(d.user))
-                        .attr('tabindex', -1)
                         .attr('target', '_blank');
                 }
-                selection
-                    .text(function(d) { return d.user || t('note.anonymous'); });
+                if (d.user) {
+                    selection.text(d.user);
+                } else {
+                    selection.call(t.append('note.anonymous'));
+                }
             });
 
         metadataEnter
             .append('div')
             .attr('class', 'comment-date')
-            .text(function(d) {
-                return t('note.status.' + d.action, { when: localeDateString(d.date) });
+            .each(function(d) {
+                d3_select(this).call(
+                    t.addOrUpdate('note.status.' + d.action, {
+                        when: localeDateString(d.date.replace(' UTC', 'Z').replace(' ', 'T')),
+                    }));
             });
 
         mainEnter
             .append('div')
             .attr('class', 'comment-text')
-            .html(function(d) { return d.html; });
+            .html(function(d) { return d.html; })
+            .selectAll('a')
+                .attr('rel', 'noopener nofollow')
+                .attr('target', '_blank');
 
         comments
             .call(replaceAvatars);
@@ -97,16 +106,6 @@ export function uiNoteComments() {
                     .attr('alt', user.display_name);
             });
         });
-    }
-
-
-    function localeDateString(s) {
-        if (!s) return null;
-        var options = { day: 'numeric', month: 'short', year: 'numeric' };
-        s = s.replace(/-/g, '/'); // fix browser-specific Date() issues
-        var d = new Date(s);
-        if (isNaN(d.getTime())) return null;
-        return d.toLocaleDateString(localizer.localeCode(), options);
     }
 
 

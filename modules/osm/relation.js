@@ -3,14 +3,21 @@ import { geoArea as d3_geoArea } from 'd3-geo';
 import { osmEntity } from './entity';
 import { osmJoinWays } from './multipolygon';
 import { geoExtent, geoPolygonContainsPolygon, geoPolygonIntersectsPolygon } from '../geo';
+import { osmIdManager } from './id_manager';
 
+/**
+ * @typedef {{ type: import('./id_manager').FeatureType; id: string; role: string }} RelationMember
+ */
 
+/**
+ * @typedef {typeof prototype & iD.AbstractEntity} OsmRelation
+ * @returns {OsmRelation}
+ */
 export function osmRelation() {
     if (!(this instanceof osmRelation)) {
-        return (new osmRelation()).initialize(arguments);
-    } else if (arguments.length) {
-        this.initialize(arguments);
+        return new osmRelation(...arguments);
     }
+    this.initialize(arguments);
 }
 
 
@@ -20,17 +27,17 @@ osmRelation.prototype = Object.create(osmEntity.prototype);
 
 
 osmRelation.creationOrder = function(a, b) {
-    var aId = parseInt(osmEntity.id.toOSM(a.id), 10);
-    var bId = parseInt(osmEntity.id.toOSM(b.id), 10);
+    var aId = parseInt(osmIdManager.toOSM(a.id), 10);
+    var bId = parseInt(osmIdManager.toOSM(b.id), 10);
 
     if (aId < 0 || bId < 0) return aId - bId;
     return bId - aId;
 };
 
 
-Object.assign(osmRelation.prototype, {
-    type: 'relation',
-    members: [],
+const prototype = {
+    type: /** @type {'relation'} */ ('relation'),
+    members: /** @type {RelationMember[]} */ ([]),
 
 
     copy: function(resolver, copies) {
@@ -198,7 +205,7 @@ Object.assign(osmRelation.prototype, {
                         keyAttributes: {
                             type: member.type,
                             role: member.role,
-                            ref: osmEntity.id.toOSM(member.id)
+                            ref: osmIdManager.toOSM(member.id)
                         }
                     };
                 }, this),
@@ -259,7 +266,10 @@ Object.assign(osmRelation.prototype, {
     hasFromViaTo: function() {
         return (
             this.members.some(function(m) { return m.role === 'from'; }) &&
-            this.members.some(function(m) { return m.role === 'via'; }) &&
+            this.members.some((m) =>
+                m.role === 'via' ||
+                (m.role === 'intersection' && this.tags.type === 'destination_sign')
+            ) &&
             this.members.some(function(m) { return m.role === 'to'; })
         );
     },
@@ -289,6 +299,9 @@ Object.assign(osmRelation.prototype, {
         return true;
     },
 
+    isConnectivity: function() {
+        return !!(this.tags.type && this.tags.type.match(/^connectivity:?/));
+    },
 
     // Returns an array [A0, ... An], each Ai being an array of node arrays [Nds0, ... Ndsm],
     // where Nds0 is an outer ring and subsequent Ndsi's (if any i > 0) being inner rings.
@@ -330,14 +343,16 @@ Object.assign(osmRelation.prototype, {
 
             for (o = 0; o < outers.length; o++) {
                 outer = outers[o];
-                if (geoPolygonContainsPolygon(outer, inner))
+                if (geoPolygonContainsPolygon(outer, inner)) {
                     return o;
+                }
             }
 
             for (o = 0; o < outers.length; o++) {
                 outer = outers[o];
-                if (geoPolygonIntersectsPolygon(outer, inner, false))
+                if (geoPolygonIntersectsPolygon(outer, inner, false)) {
                     return o;
+                }
             }
         }
 
@@ -345,7 +360,7 @@ Object.assign(osmRelation.prototype, {
             var inner = inners[i];
 
             if (d3_geoArea({ type: 'Polygon', coordinates: [inner] }) < 2 * Math.PI) {
-                inner = inner.reverse();
+                inner.reverse();
             }
 
             var o = findOuter(inners[i]);
@@ -358,4 +373,5 @@ Object.assign(osmRelation.prototype, {
 
         return result;
     }
-});
+};
+Object.assign(osmRelation.prototype, prototype);

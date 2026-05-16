@@ -1,7 +1,6 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -15,7 +14,7 @@ export function uiToolUndoRedo(context) {
 
     var tool = {
         id: 'undo_redo',
-        label: t('toolbar.undo_redo')
+        label: t.append('toolbar.undo_redo')
     };
 
     var commands = [{
@@ -51,8 +50,8 @@ export function uiToolUndoRedo(context) {
             .placement('bottom')
             .title(function (d) {
                 return d.annotation() ?
-                    t(d.id + '.tooltip', { action: d.annotation() }) :
-                    t(d.id + '.nothing');
+                    t.append(d.id + '.tooltip', { action: d.annotation() }) :
+                    t.append(d.id + '.nothing');
             })
             .keys(function(d) {
                 return [d.cmd];
@@ -66,11 +65,11 @@ export function uiToolUndoRedo(context) {
             .enter()
             .append('button')
             .attr('class', function(d) { return 'disabled ' + d.id + '-button bar-button'; })
-            .on('pointerup', function() {
+            .on('pointerup', function(d3_event) {
                 // `pointerup` is always called before `click`
                 lastPointerUpType = d3_event.pointerType;
             })
-            .on('click', function(d) {
+            .on('click', function(d3_event, d) {
                 d3_event.preventDefault();
 
                 var annotation = d.annotation();
@@ -85,14 +84,14 @@ export function uiToolUndoRedo(context) {
                 ) {
                     // there are no tooltips for touch interactions so flash feedback instead
 
-                    var text = annotation ?
-                        t(d.id + '.tooltip', { action: annotation }) :
-                        t(d.id + '.nothing');
+                    var label = annotation ?
+                        t.append(d.id + '.tooltip', { action: annotation }) :
+                        t.append(d.id + '.nothing');
                     context.ui().flash
                         .duration(2000)
                         .iconName('#' + d.icon)
                         .iconClass(annotation ? '' : 'disabled')
-                        .text(text)();
+                        .label(label)();
                 }
                 lastPointerUpType = null;
             })
@@ -104,17 +103,17 @@ export function uiToolUndoRedo(context) {
         });
 
         context.keybinding()
-            .on(commands[0].cmd, function() {
+            .on(commands[0].cmd, function(d3_event) {
                 d3_event.preventDefault();
                 if (editable()) commands[0].action();
             })
-            .on(commands[1].cmd, function() {
+            .on(commands[1].cmd, function(d3_event) {
                 d3_event.preventDefault();
                 if (editable()) commands[1].action();
             });
 
 
-        var debouncedUpdate = _debounce(update, 500, { leading: true, trailing: true });
+        var debouncedUpdate = debounce(update, 500, { leading: true, trailing: true });
 
         context.map()
             .on('move.undo_redo', debouncedUpdate)

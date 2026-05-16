@@ -1,4 +1,4 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 
 import { select as d3_select } from 'd3-selection';
 
@@ -14,39 +14,42 @@ import { t } from '../../core/localizer';
 import { svgIcon } from '../../svg';
 import { uiTooltip } from '../tooltip';
 
-export function uiToolOldDrawModes(context) {
+export function uiToolDrawModes(context) {
 
     var tool = {
         id: 'old_modes',
-        label: t('toolbar.add_feature')
+        label: t.append('toolbar.add_feature')
     };
 
     var modes = [
         modeAddPoint(context, {
-            title: t('modes.add_point.title'),
+            title: t.append('modes.add_point.title'),
             button: 'point',
-            description: t('modes.add_point.description'),
+            description: t.append('modes.add_point.description'),
             preset: presetManager.item('point'),
             key: '1'
         }),
         modeAddLine(context, {
-            title: t('modes.add_line.title'),
+            title: t.append('modes.add_line.title'),
             button: 'line',
-            description: t('modes.add_line.description'),
+            description: t.append('modes.add_line.description'),
             preset: presetManager.item('line'),
             key: '2'
         }),
         modeAddArea(context, {
-            title: t('modes.add_area.title'),
+            title: t.append('modes.add_area.title'),
             button: 'area',
-            description: t('modes.add_area.description'),
+            description: t.append('modes.add_area.description'),
             preset: presetManager.item('area'),
             key: '3'
         })
     ];
 
 
-    function enabled() {
+    function enabled(
+        // eslint-disable-next-line no-unused-vars
+        _mode // parameter is currently not used, but might be at some point
+    ) {
         return osmEditable();
     }
 
@@ -55,8 +58,10 @@ export function uiToolOldDrawModes(context) {
     }
 
     modes.forEach(function(mode) {
-        context.keybinding().on(mode.key, function() {
+        context.keybinding().on(mode.key, function(d3_event) {
             if (!enabled(mode)) return;
+
+            d3_event.preventDefault();
 
             if (mode.id === context.mode().id) {
                 context.enter(modeBrowse(context));
@@ -73,7 +78,7 @@ export function uiToolOldDrawModes(context) {
             .attr('class', 'joined')
             .style('display', 'flex');
 
-        var debouncedUpdate = _debounce(update, 500, { leading: true, trailing: true });
+        var debouncedUpdate = debounce(update, 500, { leading: true, trailing: true });
 
         context.map()
             .on('move.modes', debouncedUpdate)
@@ -98,7 +103,7 @@ export function uiToolOldDrawModes(context) {
             var buttonsEnter = buttons.enter()
                 .append('button')
                 .attr('class', function(d) { return d.id + ' add-button bar-button'; })
-                .on('click.mode-buttons', function(d) {
+                .on('click.mode-buttons', function(d3_event, d) {
                     if (!enabled(d)) return;
 
                     // When drawing, ignore accidental clicks on mode buttons - #4042
@@ -127,7 +132,8 @@ export function uiToolOldDrawModes(context) {
             buttonsEnter
                 .append('span')
                 .attr('class', 'label')
-                .text(function(mode) { return mode.title; });
+                .text('')
+                .each(function(mode) { mode.title(d3_select(this)); });
 
             // if we are adding/removing the buttons, check if toolbar has overflowed
             if (buttons.enter().size() || buttons.exit().size()) {
@@ -135,9 +141,11 @@ export function uiToolOldDrawModes(context) {
             }
 
             // update
-            buttons = buttons
+            buttons
                 .merge(buttonsEnter)
+                .attr('aria-disabled', function(d) { return !enabled(d); })
                 .classed('disabled', function(d) { return !enabled(d); })
+                .attr('aria-pressed', function(d) { return context.mode() && context.mode().button === d.button; })
                 .classed('active', function(d) { return context.mode() && context.mode().button === d.button; });
         }
     };

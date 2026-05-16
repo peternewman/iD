@@ -1,9 +1,9 @@
 import { actionDeleteRelation } from './delete_relation';
 import { actionDeleteWay } from './delete_way';
-import { osmIsInterestingTag } from '../osm/tags';
+import { osmIsInterestingTag, osmSummableTags } from '../osm/tags';
 import { osmJoinWays } from '../osm/multipolygon';
 import { geoPathIntersections } from '../geo';
-import { utilArrayGroupBy, utilArrayIntersection } from '../util';
+import { utilArrayGroupBy, utilArrayIdentical, utilArrayIntersection, utilOldestID } from '../util';
 
 
 // Join ways at the end node they share.
@@ -27,7 +27,11 @@ export function actionJoin(ids) {
 
     var action = function(graph) {
         var ways = ids.map(graph.entity, graph);
-        var survivorID = ways[0].id;
+
+        // Prefer to keep an existing way.
+        // if there are multiple existing ways, keep the oldest one
+        // the oldest way is determined by the ID of the way.
+        var survivorID = utilOldestID(ways.map(way => way.id));
 
         // if any of the ways are sided (e.g. coastline, cliff, kerb)
         // sort them first so they establish the overall order - #6033
@@ -38,14 +42,6 @@ export function actionJoin(ids) {
                 : (bSided && !aSided) ? 1
                 : 0;
         });
-
-        // Prefer to keep an existing way.
-        for (var i = 0; i < ways.length; i++) {
-            if (!ways[i].isNew()) {
-                survivorID = ways[i].id;
-                break;
-            }
-        }
 
         var sequences = osmJoinWays(ways, graph);
         var joined = sequences[0];
@@ -65,7 +61,12 @@ export function actionJoin(ids) {
                 graph = graph.replace(parent.replaceMember(way, survivor));
             });
 
-            survivor = survivor.mergeTags(way.tags);
+            const summedTags = {};
+            for (const key in way.tags) {
+                if (!canSumTags(key, way.tags, survivor.tags)) continue;
+                summedTags[key] = (+way.tags[key] + +survivor.tags[key]).toString();
+            }
+            survivor = survivor.mergeTags(way.tags, summedTags);
 
             graph = graph.replace(survivor);
             graph = actionDeleteWay(way.id)(graph);
@@ -76,7 +77,7 @@ export function actionJoin(ids) {
         function checkForSimpleMultipolygon() {
             if (!survivor.isClosed()) return;
 
-            var multipolygons = graph.parentMultipolygons(survivor).filter(function(multipolygon) {
+            const multipolygons = graph.parentMultipolygons(survivor).filter(multipolygon => {
                 // find multipolygons where the survivor is the only member
                 return multipolygon.members.length === 1;
             });
@@ -84,9 +85,9 @@ export function actionJoin(ids) {
             // skip if this is the single member of multiple multipolygons
             if (multipolygons.length !== 1) return;
 
-            var multipolygon = multipolygons[0];
+            const multipolygon = multipolygons[0];
 
-            for (var key in survivor.tags) {
+            for (const key in survivor.tags) {
                 if (multipolygon.tags[key] &&
                     // don't collapse if tags cannot be cleanly merged
                     multipolygon.tags[key] !== survivor.tags[key]) return;
@@ -94,9 +95,14 @@ export function actionJoin(ids) {
 
             survivor = survivor.mergeTags(multipolygon.tags);
             graph = graph.replace(survivor);
+            for (const relation of graph.parentRelations(multipolygon)) {
+                // transfer membership of collapsed single-member multipolygon
+                // onto resulting basic area, #9064
+                graph = graph.replace(relation.replaceMember(multipolygon, survivor));
+            }
             graph = actionDeleteRelation(multipolygon.id, true /* allow untagged members */)(graph);
 
-            var tags = Object.assign({}, survivor.tags);
+            const tags = Object.assign({}, survivor.tags);
             if (survivor.geometry(graph) !== 'area') {
                 // ensure the feature persists as an area
                 tags.area = 'yes';
@@ -129,9 +135,27 @@ export function actionJoin(ids) {
             return 'not_adjacent';
         }
 
+        var i;
+
+        // All joined ways must belong to the same set of (non-restriction) relations.
+        // Restriction relations have different logic, below, which allows some cases
+        // this prohibits, and prohibits some cases this allows.
+        var sortedParentRelations = function (id) {
+            return graph.parentRelations(graph.entity(id))
+                .filter((rel) => !rel.isRestriction() && !rel.isConnectivity())
+                .sort((a, b) => a.id.localeCompare(b.id));
+        };
+        var relsA = sortedParentRelations(ids[0]);
+        for (i = 1; i < ids.length; i++) {
+            var relsB = sortedParentRelations(ids[i]);
+            if (!utilArrayIdentical(relsA, relsB)) {
+                return 'conflicting_relations';
+            }
+        }
+
         // Loop through all combinations of path-pairs
         // to check potential intersections between all pairs
-        for (var i = 0; i < ids.length - 1; i++) {
+        for (i = 0; i < ids.length - 1; i++) {
             for (var j = i + 1; j < ids.length; j++) {
                 var path1 = graph.childNodes(graph.entity(ids[i]))
                     .map(function(e) { return e.loc; });
@@ -159,7 +183,7 @@ export function actionJoin(ids) {
         joined[0].forEach(function(way) {
             var parents = graph.parentRelations(way);
             parents.forEach(function(parent) {
-                if (parent.isRestriction() && parent.members.some(function(m) { return nodeIds.indexOf(m.id) >= 0; })) {
+                if ((parent.isRestriction() || parent.isConnectivity()) && parent.members.some(function(m) { return nodeIds.indexOf(m.id) >= 0; })) {
                     relation = parent;
                 }
             });
@@ -167,6 +191,8 @@ export function actionJoin(ids) {
             for (var k in way.tags) {
                 if (!(k in tags)) {
                     tags[k] = way.tags[k];
+                } else if (canSumTags(k, tags, way.tags)) {
+                    tags[k] = (+tags[k] + +way.tags[k]).toString();
                 } else if (tags[k] && osmIsInterestingTag(k) && tags[k] !== way.tags[k]) {
                     conflicting = true;
                 }
@@ -174,13 +200,19 @@ export function actionJoin(ids) {
         });
 
         if (relation) {
-            return 'restriction';
+            return relation.isRestriction() ? 'restriction' : 'connectivity';
         }
 
         if (conflicting) {
             return 'conflicting_tags';
         }
     };
+
+    function canSumTags(key, tagsA, tagsB) {
+        return osmSummableTags.has(key) &&
+            isFinite(tagsA[key]) &&
+            isFinite(tagsB[key]);
+    }
 
 
     return action;

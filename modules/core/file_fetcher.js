@@ -1,4 +1,6 @@
-import { json as d3_json } from 'd3-fetch';
+import { presetsCdnUrl, ociCdnUrl, wmfSitematrixCdnUrl } from '../../config/id.js';
+
+import packageJSON from '../../package.json';
 
 let _mainFileFetcher = coreFileFetcher(); // singleton
 
@@ -8,30 +10,32 @@ export { _mainFileFetcher as fileFetcher };
 // coreFileFetcher asynchronously fetches data from JSON files
 //
 export function coreFileFetcher() {
+  const ociVersion = packageJSON.devDependencies['osm-community-index'];
+  const presetsVersion = packageJSON.devDependencies['@openstreetmap/id-tagging-schema'];
+
   let _this = {};
   let _inflight = {};
   let _fileMap = {
     'address_formats': 'data/address_formats.min.json',
-    'deprecated': 'data/deprecated.min.json',
-    'discarded': 'data/discarded.min.json',
     'imagery': 'data/imagery.min.json',
     'intro_graph': 'data/intro_graph.min.json',
-    'keepRight': 'data/keepRight.min.json',
     'languages': 'data/languages.min.json',
-    'locales': 'data/locales.min.json',
-    'nsi_brands': 'https://cdn.jsdelivr.net/npm/name-suggestion-index@4/dist/brands.min.json',
-    'nsi_filters': 'https://cdn.jsdelivr.net/npm/name-suggestion-index@4/dist/filters.min.json',
-    'oci_features': 'https://cdn.jsdelivr.net/npm/osm-community-index@2/dist/features.min.json',
-    'oci_resources': 'https://cdn.jsdelivr.net/npm/osm-community-index@2/dist/resources.min.json',
-    'preset_categories': 'data/preset_categories.min.json',
-    'preset_defaults': 'data/preset_defaults.min.json',
-    'preset_fields': 'data/preset_fields.min.json',
-    'preset_presets': 'data/preset_presets.min.json',
+    'locales': 'locales/index.min.json',
     'phone_formats': 'data/phone_formats.min.json',
     'qa_data': 'data/qa_data.min.json',
     'shortcuts': 'data/shortcuts.min.json',
     'territory_languages': 'data/territory_languages.min.json',
-    'wmf_sitematrix': 'https://cdn.jsdelivr.net/npm/wmf-sitematrix@0.1/wikipedia.min.json'
+    'oci_defaults': ociCdnUrl.replace('{version}', ociVersion) + 'dist/json/defaults.min.json',
+    'oci_features': ociCdnUrl.replace('{version}', ociVersion) + 'dist/json/featureCollection.min.json',
+    'oci_resources': ociCdnUrl.replace('{version}', ociVersion) + 'dist/json/resources.min.json',
+    'presets_package': presetsCdnUrl.replace('{presets_version}', presetsVersion) + 'package.json',
+    'deprecated': presetsCdnUrl + 'dist/deprecated.min.json',
+    'discarded': presetsCdnUrl + 'dist/discarded.min.json',
+    'preset_categories': presetsCdnUrl + 'dist/preset_categories.min.json',
+    'preset_defaults': presetsCdnUrl + 'dist/preset_defaults.min.json',
+    'preset_fields': presetsCdnUrl + 'dist/fields.min.json',
+    'preset_presets': presetsCdnUrl + 'dist/presets.min.json',
+    'wmf_sitematrix': wmfSitematrixCdnUrl.replace('{version}', '0.2') + 'data/wikipedia.min.json'
   };
 
   let _cachedData = {};
@@ -52,9 +56,30 @@ export function coreFileFetcher() {
       return Promise.reject(`Unknown data file for "${which}"`);
     }
 
+    if (url.includes('{presets_version}')) {
+      return _this.get('presets_package')
+        .then(result => {
+          const presetsVersion = result.version;
+          return getUrl(url.replace('{presets_version}', presetsVersion), which);
+        });
+    } else {
+      return getUrl(url, which);
+    }
+  };
+
+  function getUrl(url, which) {
     let prom = _inflight[url];
     if (!prom) {
-      _inflight[url] = prom = d3_json(url)
+      prom = (window.VITEST ? import(`../${url}`) : fetch(url))
+        .then(response => {
+          if (window.VITEST) return response.default;
+
+          if (!response.ok || !response.json) {
+            throw new Error(response.status + ' ' + response.statusText);
+          }
+          if (response.status === 204 || response.status === 205) return;  // No Content, Reset Content
+          return response.json();
+        })
         .then(result => {
           delete _inflight[url];
           if (!result) {
@@ -67,10 +92,11 @@ export function coreFileFetcher() {
           delete _inflight[url];
           throw err;
         });
+      _inflight[url] = prom;
     }
 
     return prom;
-  };
+  }
 
 
   // Accessor for the file map

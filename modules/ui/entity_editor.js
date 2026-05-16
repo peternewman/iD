@@ -1,6 +1,6 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
-import { event as d3_event } from 'd3-selection';
-import deepEqual from 'fast-deep-equal';
+import { select as d3_select } from 'd3-selection';
+import { deepEqual } from 'fast-equals';
 
 import { presetManager } from '../presets';
 import { t, localizer } from '../core/localizer';
@@ -41,28 +41,33 @@ export function uiEntityEditor(context) {
         // Enter
         var headerEnter = header.enter()
             .append('div')
-            .attr('class', 'header fillL cf');
+            .attr('class', 'header fillL');
+
+        var direction = (localizer.textDirection() === 'rtl') ? 'forward' : 'backward';
 
         headerEnter
             .append('button')
             .attr('class', 'preset-reset preset-choose')
-            .call(svgIcon((localizer.textDirection() === 'rtl') ? '#iD-icon-forward' : '#iD-icon-backward'));
+            .attr('title', t('inspector.back_tooltip'))
+            .call(svgIcon(`#iD-icon-${direction}`));
 
         headerEnter
             .append('button')
             .attr('class', 'close')
+            .attr('title', t('icons.close'))
             .on('click', function() { context.enter(modeBrowse(context)); })
             .call(svgIcon(_modified ? '#iD-icon-apply' : '#iD-icon-close'));
 
         headerEnter
-            .append('h3');
+            .append('h2');
 
         // Update
         header = header
             .merge(headerEnter);
 
-        header.selectAll('h3')
-            .text(_entityIDs.length === 1 ? t('inspector.edit') : t('inspector.edit_features'));
+        header.selectAll('h2')
+            .text('')
+            .call(_entityIDs.length === 1 ? t.append('inspector.edit') : t.append('inspector.edit_features'));
 
         header.selectAll('.preset-reset')
             .on('click', function() {
@@ -112,24 +117,6 @@ export function uiEntityEditor(context) {
             body.call(section.render);
         });
 
-        body
-            .selectAll('.key-trap-wrap')
-            .data([0])
-            .enter()
-            .append('div')
-            .attr('class', 'key-trap-wrap')
-            .append('input')
-            .attr('type', 'text')
-            .attr('class', 'key-trap')
-            .on('keydown.key-trap', function() {
-                // On tabbing, send focus back to the first field on the inspector-body
-                // (probably the `name` field) #4159
-                if (d3_event.keyCode === 9 && !d3_event.shiftKey) {
-                    d3_event.preventDefault();
-                    body.select('input').node().focus();
-                }
-            });
-
         context.history()
             .on('change.entity-editor', historyChanged);
 
@@ -156,10 +143,10 @@ export function uiEntityEditor(context) {
             if (priorActivePreset && _activePresets.length === 1 && priorActivePreset !== _activePresets[0]) {
                 // flash the button to indicate the preset changed
                 context.container().selectAll('.entity-editor button.preset-reset .label')
-                    .style('background-color', '#fff')
-                    .transition()
-                    .duration(750)
-                    .style('background-color', null);
+                    .classed('flash-bg', true)
+                    .on('animationend', function() {
+                        d3_select(this).classed('flash-bg', false);
+                    });
             }
         }
     }
@@ -177,11 +164,19 @@ export function uiEntityEditor(context) {
 
             var tags = Object.assign({}, entity.tags);   // shallow copy
 
-            for (var k in changed) {
-                if (!k) continue;
-                var v = changed[k];
-                if (v !== undefined || tags.hasOwnProperty(k)) {
-                    tags[k] = v;
+            if (typeof changed === 'function') {
+                // a complex callback tag change
+                tags = changed(tags);
+            } else {
+                for (var k in changed) {
+                    if (!k) continue;
+                    var v = changed[k];
+                    if (typeof v === 'object') {
+                        // a "key only" tag change
+                        tags[k] = tags[v.oldKey];
+                    } else if (v !== undefined || tags.hasOwnProperty(k)) {
+                        tags[k] = v;
+                    }
                 }
             }
 
@@ -205,11 +200,11 @@ export function uiEntityEditor(context) {
             var annotation = t('operations.change_tags.annotation');
 
             if (_coalesceChanges) {
-                context.overwrite(combinedAction, annotation);
+                context.replace(combinedAction, annotation);
             } else {
                 context.perform(combinedAction, annotation);
-                _coalesceChanges = !!onInput;
             }
+            _coalesceChanges = !!onInput;
         }
 
         // if leaving field (blur event), rerun validation
@@ -262,10 +257,9 @@ export function uiEntityEditor(context) {
             var annotation = t('operations.change_tags.annotation');
 
             if (_coalesceChanges) {
-                context.overwrite(combinedAction, annotation);
+                context.replace(combinedAction, annotation);
             } else {
                 context.perform(combinedAction, annotation);
-                _coalesceChanges = false;
             }
         }
 
@@ -289,11 +283,15 @@ export function uiEntityEditor(context) {
 
     entityEditor.entityIDs = function(val) {
         if (!arguments.length) return _entityIDs;
+
+        // always reload these even if the entityIDs are unchanged, since we
+        // could be reselecting after something like dragging a node
+        _base = context.graph();
+        _coalesceChanges = false;
+
         if (val && _entityIDs && utilArrayIdentical(_entityIDs, val)) return entityEditor;  // exit early if no change
 
         _entityIDs = val;
-        _base = context.graph();
-        _coalesceChanges = false;
 
         loadActivePresets(true);
 

@@ -23,12 +23,13 @@ export * from './validations/index';
 // This is only done in testing because of the performance penalty.
 export let debug = false;
 
+/** @param {boolean} newValue */
+export const setDebug = (newValue) => { debug = newValue; };
+
 // Reexport just what our tests use, see #4379
 import * as D3 from 'd3';
 export let d3 = {
-  customEvent: D3.customEvent,
   dispatch:  D3.dispatch,
-  event:  D3.event,
   geoMercator: D3.geoMercator,
   geoProjection: D3.geoProjection,
   polygonArea: D3.polygonArea,
@@ -37,4 +38,3 @@ export let d3 = {
   selectAll: D3.selectAll,
   timerFlush: D3.timerFlush
 };
-

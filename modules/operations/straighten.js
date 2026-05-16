@@ -3,6 +3,7 @@ import { actionStraightenNodes } from '../actions/straighten_nodes';
 import { actionStraightenWay } from '../actions/straighten_way';
 import { behaviorOperation } from '../behavior/operation';
 import { utilArrayDifference, utilGetAllNodes, utilTotalExtent } from '../util/index';
+import { svgPath } from '../svg';
 
 
 export function operationStraighten(context, selectedIDs) {
@@ -20,7 +21,7 @@ export function operationStraighten(context, selectedIDs) {
     function chooseAction() {
         // straighten selected nodes
         if (_wayIDs.length === 0 && _nodeIDs.length > 2) {
-            _geometry = 'points';
+            _geometry = 'point';
             return actionStraightenNodes(_nodeIDs, context.projection);
 
         // straighten selected ways (possibly between range of 2 selected nodes)
@@ -67,7 +68,7 @@ export function operationStraighten(context, selectedIDs) {
                 _extent = utilTotalExtent(_nodeIDs, context.graph());
             }
 
-            _geometry = _wayIDs.length === 1 ? 'line' : 'lines';
+            _geometry = 'line';
             return actionStraightenWay(selectedIDs, context.projection);
         }
 
@@ -121,22 +122,37 @@ export function operationStraighten(context, selectedIDs) {
     };
 
 
+    operation.getAuxiliaryGeometry = function() {
+        const graph = context.graph();
+        const previewGraph = _action(graph);
+        const getPath = svgPath(context.projection, previewGraph, false);
+        return selectedIDs.map(entityId => {
+            const entity = previewGraph.hasEntity(entityId);
+            return {
+                id: entity.id,
+                path: getPath(entity),
+                klass: 'preview'
+            };
+        });
+    };
+
+
     operation.tooltip = function() {
         var disable = operation.disabled();
         return disable ?
-            t('operations.straighten.' + disable + '.' + _amount) :
-            t('operations.straighten.description.' + _geometry);
+            t.append('operations.straighten.' + disable + '.' + _amount) :
+            t.append('operations.straighten.description.' + _geometry + (_wayIDs.length === 1 ? '' : 's'));
     };
 
 
     operation.annotation = function() {
-        return t('operations.straighten.annotation.' + _geometry);
+        return t('operations.straighten.annotation.' + _geometry, { n: _wayIDs.length ? _wayIDs.length : _nodeIDs.length });
     };
 
 
     operation.id = 'straighten';
     operation.keys = [t('operations.straighten.key')];
-    operation.title = t('operations.straighten.title');
+    operation.title = t.append('operations.straighten.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

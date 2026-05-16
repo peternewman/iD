@@ -1,11 +1,11 @@
-import _throttle from 'lodash-es/throttle';
+import { throttle } from 'es-toolkit/compat';
 import { select as d3_select } from 'd3-selection';
 import { svgPath, svgPointTransform } from './helpers';
 import { services } from '../services';
 
 
 export function svgStreetside(projection, context, dispatch) {
-    var throttledRedraw = _throttle(function () { dispatch.call('change'); }, 1000);
+    var throttledRedraw = throttle(function () { dispatch.call('change'); }, 1000);
     var minZoom = 14;
     var minMarkerZoom = 16;
     var minViewfieldZoom = 18;
@@ -31,7 +31,7 @@ export function svgStreetside(projection, context, dispatch) {
             _streetside = services.streetside;
             _streetside.event
                 .on('viewerChanged.svgStreetside', viewerChanged)
-                .on('loadedBubbles.svgStreetside', throttledRedraw);
+                .on('loadedImages.svgStreetside', throttledRedraw);
         } else if (!services.streetside && _streetside) {
             _streetside = null;
         }
@@ -87,7 +87,7 @@ export function svgStreetside(projection, context, dispatch) {
     /**
      * click() Handles 'bubble' point click event.
      */
-    function click(d) {
+    function click(d3_event, d) {
         var service = getService();
         if (!service) return;
 
@@ -98,13 +98,13 @@ export function svgStreetside(projection, context, dispatch) {
         _selectedSequence = d.sequenceKey;
 
         service
-            .selectImage(context, d)
-            .then(response => {
-                if (response.status === 'ok'){
-                    service.showViewer(context, _viewerYaw);
-                }
+            .ensureViewerLoaded(context)
+            .then(function() {
+                service
+                    .selectImage(context, d.key)
+                    .yaw(_viewerYaw)
+                    .showViewer(context);
             });
-
 
         context.map().centerEase(d.loc);
     }
@@ -112,7 +112,7 @@ export function svgStreetside(projection, context, dispatch) {
     /**
      * mouseover().
      */
-    function mouseover(d) {
+    function mouseover(d3_event, d) {
         var service = getService();
         if (service) service.setStyles(context, d);
     }
@@ -157,7 +157,57 @@ export function svgStreetside(projection, context, dispatch) {
     }
 
 
-    context.photos().on('change.streetside', update);
+    function filterBubbles(bubbles, skipDateFilter = false) {
+        var fromDate = context.photos().fromDate();
+        var toDate = context.photos().toDate();
+        var usernames = context.photos().usernames();
+
+        if (fromDate && !skipDateFilter) {
+            var fromTimestamp = new Date(fromDate).getTime();
+            bubbles = bubbles.filter(function(bubble) {
+                return new Date(bubble.captured_at).getTime() >= fromTimestamp;
+            });
+        }
+        if (toDate && !skipDateFilter) {
+            var toTimestamp = new Date(toDate).getTime();
+            bubbles = bubbles.filter(function(bubble) {
+                return new Date(bubble.captured_at).getTime() <= toTimestamp;
+            });
+        }
+        if (usernames) {
+            bubbles = bubbles.filter(function(bubble) {
+                return usernames.indexOf(bubble.captured_by) !== -1;
+            });
+        }
+
+        return bubbles;
+    }
+
+    function filterSequences(sequences, skipDateFilter = false) {
+        var fromDate = context.photos().fromDate();
+        var toDate = context.photos().toDate();
+        var usernames = context.photos().usernames();
+
+        if (fromDate && !skipDateFilter) {
+            var fromTimestamp = new Date(fromDate).getTime();
+            sequences = sequences.filter(function(sequences) {
+                return new Date(sequences.properties.captured_at).getTime() >= fromTimestamp;
+            });
+        }
+        if (toDate && !skipDateFilter) {
+            var toTimestamp = new Date(toDate).getTime();
+            sequences = sequences.filter(function(sequences) {
+                return new Date(sequences.properties.captured_at).getTime() <= toTimestamp;
+            });
+        }
+        if (usernames) {
+            sequences = sequences.filter(function(sequences) {
+                return usernames.indexOf(sequences.properties.captured_by) !== -1;
+            });
+        }
+
+        return sequences;
+    }
 
     /**
      * update().
@@ -176,17 +226,23 @@ export function svgStreetside(projection, context, dispatch) {
         if (context.photos().showsPanoramic()) {
             sequences = (service ? service.sequences(projection) : []);
             bubbles = (service && showMarkers ? service.bubbles(projection) : []);
+            sequences = filterSequences(sequences);
+            bubbles = filterBubbles(bubbles);
         }
 
         var traces = layer.selectAll('.sequences').selectAll('.sequence')
             .data(sequences, function(d) { return d.properties.key; });
+
+        dispatch.call('photoDatesChanged', this, 'streetside', [
+            ...filterBubbles(bubbles, true).map(p => p.captured_at),
+            ...filterSequences(sequences, true).map(t => t.properties.vintageStart)]);
 
         // exit
         traces.exit()
             .remove();
 
         // enter/update
-        traces = traces.enter()
+        traces.enter()
             .append('path')
             .attr('class', 'sequence')
             .merge(traces)
@@ -262,7 +318,7 @@ export function svgStreetside(projection, context, dispatch) {
 
     /**
      * drawImages()
-     * drawImages is the method that is returned (and that runs) everytime 'svgStreetside()' is called.
+     * drawImages is the method that is returned (and that runs) every time 'svgStreetside()' is called.
      * 'svgStreetside()' is called from index.js
      */
     function drawImages(selection) {
@@ -297,8 +353,11 @@ export function svgStreetside(projection, context, dispatch) {
                 update();
                 service.loadBubbles(projection);
             } else {
+                dispatch.call('photoDatesChanged', this, 'streetside', []);
                 editOff();
             }
+        } else {
+            dispatch.call('photoDatesChanged', this, 'streetside', []);
         }
     }
 
@@ -311,8 +370,10 @@ export function svgStreetside(projection, context, dispatch) {
         svgStreetside.enabled = _;
         if (svgStreetside.enabled) {
             showLayer();
+            context.photos().on('change.streetside', update);
         } else {
             hideLayer();
+            context.photos().on('change.streetside', null);
         }
         dispatch.call('change');
         return this;
@@ -323,6 +384,10 @@ export function svgStreetside(projection, context, dispatch) {
      */
     drawImages.supported = function() {
         return !!getService();
+    };
+
+    drawImages.rendered = function(zoom) {
+      return zoom >= minZoom;
     };
 
     init();

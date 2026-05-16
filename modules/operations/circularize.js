@@ -2,6 +2,7 @@ import { t } from '../core/localizer';
 import { actionCircularize } from '../actions/circularize';
 import { behaviorOperation } from '../behavior/operation';
 import { utilGetAllNodes } from '../util';
+import { svgPath } from '../svg';
 
 
 export function operationCircularize(context, selectedIDs) {
@@ -93,22 +94,41 @@ export function operationCircularize(context, selectedIDs) {
     };
 
 
+    operation.getAuxiliaryGeometry = function() {
+        const graph = context.graph();
+        return _actions.map((action, idx) => {
+            if (!action.disabled(graph)) {
+                const previewGraph = action(graph, t);
+                const way = previewGraph.hasEntity(selectedIDs[idx]);
+                const getPath = svgPath(context.projection, previewGraph, false);
+                return {
+                    id: way.id,
+                    path: getPath(way),
+                    klass: 'preview'
+                };
+            } else {
+                return false;
+            }
+        }).filter(Boolean);
+    };
+
+
     operation.tooltip = function() {
         var disable = operation.disabled();
         return disable ?
-            t('operations.circularize.' + disable + '.' + _amount) :
-            t('operations.circularize.description.' + _amount);
+            t.append('operations.circularize.' + disable + '.' + _amount) :
+            t.append('operations.circularize.description.' + _amount);
     };
 
 
     operation.annotation = function() {
-        return t('operations.circularize.annotation.' + _amount);
+        return t('operations.circularize.annotation.feature', { n: _actions.length });
     };
 
 
     operation.id = 'circularize';
     operation.keys = [t('operations.circularize.key')];
-    operation.title = t('operations.circularize.title');
+    operation.title = t.append('operations.circularize.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

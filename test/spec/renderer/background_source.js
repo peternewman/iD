@@ -92,9 +92,17 @@ describe('iD.rendererBackgroundSource.Custom', function() {
             var source = iD.rendererBackgroundSource.Custom('http://example.com?token=MYTOKEN');
             expect(source.imageryUsed()).to.eql('Custom (http://example.com?token={apikey} )');
         });
+        it('sanitizes `Signature` for CloudFront', function() {
+            var source = iD.rendererBackgroundSource.Custom('https://example.com/?Key-Pair-Id=foo&Policy=bar&Signature=baz');
+            expect(source.imageryUsed()).to.eql('Custom (https://example.com/?Key-Pair-Id=foo&Policy=bar&Signature={apikey} )');
+        });
         it('sanitizes wms path `token`', function() {
             var source = iD.rendererBackgroundSource.Custom('http://example.com/wms/v1/token/MYTOKEN/1.0.0/layer');
             expect(source.imageryUsed()).to.eql('Custom (http://example.com/wms/v1/token/{apikey}/1.0.0/layer )');
+        });
+        it('sanitizes `key` in the URL path', function() {
+            var source = iD.rendererBackgroundSource.Custom('http://example.com/services;key=MYTOKEN/layer');
+            expect(source.imageryUsed()).to.eql('Custom (http://example.com/services;key={apikey}/layer )');
         });
     });
 

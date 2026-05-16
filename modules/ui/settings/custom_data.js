@@ -1,5 +1,4 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
-import { event as d3_event } from 'd3-selection';
 
 import { prefs } from '../../core/preferences';
 import { t } from '../../core/localizer';
@@ -20,10 +19,10 @@ export function uiSettingsCustomData(context) {
         };
         var _currSettings = {
             fileList: (dataLayer && dataLayer.fileList()) || null,
-            url: prefs('settings-custom-data-url')
+            // url: prefs('settings-custom-data-url')
         };
 
-        // var example = 'https://{switch:a,b,c}.tile.openstreetmap.org/{zoom}/{x}/{y}.png';
+        // var example = 'https://tile.openstreetmap.org/{zoom}/{x}/{y}.png';
         var modal = uiConfirm(selection).okButton();
 
         modal
@@ -31,7 +30,7 @@ export function uiSettingsCustomData(context) {
 
         modal.select('.modal-section.header')
             .append('h3')
-            .text(t('settings.custom_data.header'));
+            .call(t.append('settings.custom_data.header'));
 
 
         var textSection = modal.select('.modal-section.message-text');
@@ -39,14 +38,15 @@ export function uiSettingsCustomData(context) {
         textSection
             .append('pre')
             .attr('class', 'instructions-file')
-            .text(t('settings.custom_data.file.instructions'));
+            .call(t.append('settings.custom_data.file.instructions'));
 
         textSection
             .append('input')
             .attr('class', 'field-file')
             .attr('type', 'file')
-            .property('files', _currSettings.fileList)  // works for all except IE11
-            .on('change', function() {
+            .attr('accept', '.gpx,.kml,.geojson,.json,application/gpx+xml,application/vnd.google-earth.kml+xml,application/geo+json,application/json')
+            .property('files', _currSettings.fileList)
+            .on('change', function(d3_event) {
                 var files = d3_event.target.files;
                 if (files && files.length) {
                     _currSettings.url = '';
@@ -59,12 +59,12 @@ export function uiSettingsCustomData(context) {
 
         textSection
             .append('h4')
-            .text(t('settings.custom_data.or'));
+            .call(t.append('settings.custom_data.or'));
 
         textSection
             .append('pre')
             .attr('class', 'instructions-url')
-            .text(t('settings.custom_data.url.instructions'));
+            .call(t.append('settings.custom_data.url.instructions'));
 
         textSection
             .append('textarea')
@@ -80,7 +80,7 @@ export function uiSettingsCustomData(context) {
         buttonSection
             .insert('button', '.ok-button')
             .attr('class', 'button cancel-button secondary-action')
-            .text(t('confirm.cancel'));
+            .call(t.append('confirm.cancel'));
 
 
         buttonSection.select('.cancel-button')

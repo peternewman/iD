@@ -21,7 +21,7 @@ export function uiPanelHistory(context) {
         if (!userName) {
             selection
                 .append('span')
-                .text(t('info_panels.history.unknown'));
+                .call(t.append('info_panels.history.unknown'));
             return;
         }
 
@@ -40,8 +40,7 @@ export function uiPanelHistory(context) {
                 .attr('class', 'user-osm-link')
                 .attr('href', osm.userURL(userName))
                 .attr('target', '_blank')
-                .attr('tabindex', -1)
-                .text('OSM');
+                .call(t.append('info_panels.history.profile_link'));
         }
 
         links
@@ -58,7 +57,7 @@ export function uiPanelHistory(context) {
         if (!changeset) {
             selection
                 .append('span')
-                .text(t('info_panels.history.unknown'));
+                .call(t.append('info_panels.history.unknown'));
             return;
         }
 
@@ -77,8 +76,7 @@ export function uiPanelHistory(context) {
                 .attr('class', 'changeset-osm-link')
                 .attr('href', osm.changesetURL(changeset))
                 .attr('target', '_blank')
-                .attr('tabindex', -1)
-                .text('OSM');
+                .call(t.append('info_panels.history.changeset_link'));
         }
 
         links
@@ -86,7 +84,6 @@ export function uiPanelHistory(context) {
             .attr('class', 'changeset-osmcha-link')
             .attr('href', 'https://osmcha.org/changesets/' + changeset)
             .attr('target', '_blank')
-            .attr('tabindex', -1)
             .text('OSMCha');
 
         links
@@ -94,7 +91,6 @@ export function uiPanelHistory(context) {
             .attr('class', 'changeset-achavi-link')
             .attr('href', 'https://overpass-api.de/achavi/?changeset=' + changeset)
             .attr('target', '_blank')
-            .attr('tabindex', -1)
             .text('Achavi');
     }
 
@@ -102,10 +98,9 @@ export function uiPanelHistory(context) {
     function redraw(selection) {
         var selectedNoteID = context.selectedNoteID();
         osm = context.connection();
-
         var selected, note, entity;
         if (selectedNoteID && osm) {       // selected 1 note
-            selected = [ t('note.note') + ' ' + selectedNoteID ];
+            selected = [ t.append('note.note', { suffix: ' ' + selectedNoteID }) ];
             note = osm.getNote(selectedNoteID);
         } else {                           // selected 1..n entities
             selected = context.selectedIDs()
@@ -117,12 +112,21 @@ export function uiPanelHistory(context) {
 
         var singular = selected.length === 1 ? selected[0] : null;
 
-        selection.html('');
+        selection.text('');
 
-        selection
+        const heading = selection
             .append('h4')
-            .attr('class', 'history-heading')
-            .text(singular || t('info_panels.history.selected', { n: selected.length }));
+            .attr('class', 'history-heading');
+
+        if (singular) {
+            if (typeof singular === 'function') {
+                heading.call(singular);
+            } else {
+                heading.text(singular);
+            }
+        } else {
+            heading.call(t.append('info_panels.selected', { n: selected.length }));
+        }
 
         if (!singular) return;
 
@@ -138,7 +142,7 @@ export function uiPanelHistory(context) {
         if (!note || note.isNew()) {
             selection
                 .append('div')
-                .text(t('info_panels.history.note_no_history'));
+                .call(t.append('info_panels.history.note_no_history'));
             return;
         }
 
@@ -147,20 +151,20 @@ export function uiPanelHistory(context) {
 
         list
             .append('li')
-            .text(t('info_panels.history.note_comments') + ':')
+            .call(t.append('info_panels.history.note_comments', { suffix: ':' }))
             .append('span')
             .text(note.comments.length);
 
         if (note.comments.length) {
             list
                 .append('li')
-                .text(t('info_panels.history.note_created_date') + ':')
+                .call(t.append('info_panels.history.note_created_date', { suffix: ':' }))
                 .append('span')
                 .text(displayTimestamp(note.comments[0].date));
 
             list
                 .append('li')
-                .text(t('info_panels.history.note_created_user') + ':')
+                .call(t.append('info_panels.history.note_created_user', { suffix: ':' }))
                 .call(displayUser, note.comments[0].user);
         }
 
@@ -169,11 +173,10 @@ export function uiPanelHistory(context) {
                 .append('a')
                 .attr('class', 'view-history-on-osm')
                 .attr('target', '_blank')
-                .attr('tabindex', -1)
                 .attr('href', osm.noteURL(note))
                 .call(svgIcon('#iD-icon-out-link', 'inline'))
                 .append('span')
-                .text(t('info_panels.history.note_link_text'));
+                .call(t.append('info_panels.history.note_link_text'));
         }
     }
 
@@ -182,7 +185,7 @@ export function uiPanelHistory(context) {
         if (!entity || entity.isNew()) {
             selection
                 .append('div')
-                .text(t('info_panels.history.no_history'));
+                .call(t.append('info_panels.history.no_history'));
             return;
         }
 
@@ -196,9 +199,7 @@ export function uiPanelHistory(context) {
                 .attr('class', 'view-history-on-osm')
                 .attr('href', osm.historyURL(entity))
                 .attr('target', '_blank')
-                .attr('tabindex', -1)
-                .attr('title', t('info_panels.history.link_text'))
-                .text('OSM');
+                .call(t.append('info_panels.history.history_link'));
         }
         links
             .append('a')
@@ -213,24 +214,24 @@ export function uiPanelHistory(context) {
 
         list
             .append('li')
-            .text(t('info_panels.history.version') + ':')
+            .call(t.append('info_panels.history.version', { suffix: ':' }))
             .append('span')
             .text(entity.version);
 
         list
             .append('li')
-            .text(t('info_panels.history.last_edit') + ':')
+            .call(t.append('info_panels.history.last_edit', { suffix: ':' }))
             .append('span')
             .text(displayTimestamp(entity.timestamp));
 
         list
             .append('li')
-            .text(t('info_panels.history.edited_by') + ':')
+            .call(t.append('info_panels.history.edited_by', { suffix: ':' }))
             .call(displayUser, entity.user);
 
         list
             .append('li')
-            .text(t('info_panels.history.changeset') + ':')
+            .call(t.append('info_panels.history.changeset', { suffix: ':' }))
             .call(displayChangeset, entity.changeset);
     }
 
@@ -255,7 +256,7 @@ export function uiPanelHistory(context) {
     };
 
     panel.id = 'history';
-    panel.title = t('info_panels.history.title');
+    panel.label = t.append('info_panels.history.title');
     panel.key = t('info_panels.history.key');
 
 

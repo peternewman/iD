@@ -74,13 +74,16 @@ export function operationMerge(context, selectedIDs) {
     operation.tooltip = function() {
         var disabled = operation.disabled();
         if (disabled) {
-            if (disabled === 'restriction') {
-                return t('operations.merge.restriction',
-                    { relation: presetManager.item('type/restriction').name() });
+            if (disabled === 'conflicting_relations') {
+                return t.append('operations.merge.conflicting_relations');
             }
-            return t('operations.merge.' + disabled);
+            if (disabled === 'restriction' || disabled === 'connectivity') {
+                return t.append('operations.merge.damage_relation',
+                    { relation: presetManager.item('type/' + disabled).name() });
+            }
+            return t.append('operations.merge.' + disabled);
         }
-        return t('operations.merge.description');
+        return t.append('operations.merge.description');
     };
 
     operation.annotation = function() {
@@ -89,7 +92,7 @@ export function operationMerge(context, selectedIDs) {
 
     operation.id = 'merge';
     operation.keys = [t('operations.merge.key')];
-    operation.title = t('operations.merge.title');
+    operation.title = t.append('operations.merge.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

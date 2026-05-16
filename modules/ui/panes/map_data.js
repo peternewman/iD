@@ -1,4 +1,3 @@
-
 import { t } from '../../core/localizer';
 import { uiPane } from '../pane';
 
@@ -11,8 +10,8 @@ export function uiPaneMapData(context) {
 
     var mapDataPane = uiPane('map-data', context)
         .key(t('map_data.key'))
-        .title(t('map_data.title'))
-        .description(t('map_data.description'))
+        .label(t.append('map_data.title'))
+        .description(t.append('map_data.description'))
         .iconName('iD-icon-data')
         .sections([
             uiSectionDataLayers(context),

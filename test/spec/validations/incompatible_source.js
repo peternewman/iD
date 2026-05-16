@@ -2,14 +2,14 @@ describe('iD.validations.incompatible_source', function () {
     var context;
 
     beforeEach(function() {
-        context = iD.coreContext().init();
+        context = iD.coreContext().assetPath('../dist/').init();
     });
 
     function createWay(tags) {
-        var n1 = iD.osmNode({id: 'n-1', loc: [4,4]});
-        var n2 = iD.osmNode({id: 'n-2', loc: [4,5]});
-        var n3 = iD.osmNode({id: 'n-3', loc: [5,5]});
-        var w = iD.osmWay({id: 'w-1', nodes: ['n-1', 'n-2', 'n-3'], tags: tags});
+        var n1 = new iD.osmNode({id: 'n-1', loc: [4,4]});
+        var n2 = new iD.osmNode({id: 'n-2', loc: [4,5]});
+        var n3 = new iD.osmNode({id: 'n-3', loc: [5,5]});
+        var w = new iD.osmWay({id: 'w-1', nodes: ['n-1', 'n-2', 'n-3'], tags: tags});
 
         context.perform(
             iD.actionAddEntity(n1),
@@ -63,4 +63,15 @@ describe('iD.validations.incompatible_source', function () {
         expect(issue.entityIds[0]).to.eql('w-1');
     });
 
+    it('does not flag buildings in the google-africa-buildings dataset', function() {
+        createWay({ building: 'yes', source: 'esri/Google_Africa_Buildings' });
+        var issues = validate();
+        expect(issues).to.have.lengthOf(0);
+    });
+
+    it('does not flag buildings in the google-open-buildings dataset', function() {
+        createWay({ building: 'yes', source: 'esri/Google_Open_Buildings' });
+        var issues = validate();
+        expect(issues).to.have.lengthOf(0);
+    });
 });

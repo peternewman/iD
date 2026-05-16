@@ -14,7 +14,7 @@ export function uiGeolocate(context) {
         // don't hang indefinitely getting the location
         timeout: 6000 // 6sec
     };
-    var _locating = uiLoading(context).message(t('geolocate.locating')).blocking(true);
+    var _locating = uiLoading(context).message(t.addOrUpdate('geolocate.locating')).blocking(true);
     var _layer = context.layers().layer('geolocate');
     var _position;
     var _extent;
@@ -62,7 +62,7 @@ export function uiGeolocate(context) {
             zoomTo();
         } else {
             context.ui().flash
-                .text(t('geolocate.location_unavailable'))
+                .label(t.append('geolocate.location_unavailable'))
                 .iconName('#iD-icon-geolocate')();
         }
 
@@ -77,6 +77,7 @@ export function uiGeolocate(context) {
 
     function updateButtonState() {
         _button.classed('active', _layer.enabled());
+        _button.attr('aria-pressed', _layer.enabled());
     }
 
     return function(selection) {
@@ -85,13 +86,11 @@ export function uiGeolocate(context) {
         _button = selection
             .append('button')
             .on('click', click)
+            .attr('aria-pressed', false)
             .call(svgIcon('#iD-icon-geolocate', 'light'))
             .call(uiTooltip()
                 .placement((localizer.textDirection() === 'rtl') ? 'right' : 'left')
-                .title(t('geolocate.title'))
-                .keys([t('geolocate.key')])
+                .title(() => t.append('geolocate.title'))
             );
-
-        context.keybinding().on(t('geolocate.key'), click);
     };
 }

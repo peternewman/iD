@@ -1,25 +1,27 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
 import { interpolateNumber as d3_interpolateNumber } from 'd3-interpolate';
 import { select as d3_select } from 'd3-selection';
+import turf_bboxClip from '@turf/bbox-clip';
+import turf_bbox from '@turf/bbox';
 
 import whichPolygon from 'which-polygon';
 
 import { prefs } from '../core/preferences';
 import { fileFetcher } from '../core/file_fetcher';
-import { geoExtent, geoMetersToOffset, geoOffsetToMeters} from '../geo';
+import { geoMetersToOffset, geoOffsetToMeters, geoExtent } from '../geo';
 import { rendererBackgroundSource } from './background_source';
 import { rendererTileLayer } from './tile_layer';
-import { utilQsString, utilStringQs } from '../util';
-import { utilDetect } from '../util/detect';
+import { utilAesDecrypt, utilStringQs } from '../util';
 import { utilRebind } from '../util/rebind';
+import { patchHash } from '../behavior';
 
 
 let _imageryIndex = null;
 
 export function rendererBackground(context) {
   const dispatch = d3_dispatch('change');
-  const detected = utilDetect();
   const baseLayer = rendererTileLayer(context).projection(context.projection);
+  let _checkedBlocklists = [];
   let _isValid = true;
   let _overlayLayers = [];
   let _brightness = 1;
@@ -30,7 +32,7 @@ export function rendererBackground(context) {
 
   function ensureImageryIndex() {
     return fileFetcher.get('imagery')
-      .then(sources => {
+      .then(async sources => {
         if (_imageryIndex) return _imageryIndex;
 
         _imageryIndex = {
@@ -58,6 +60,12 @@ export function rendererBackground(context) {
           return feature;
 
         }).filter(Boolean);
+
+        for (const source of features) {
+          if (source.encrypted) {
+            source.template = await utilAesDecrypt(source.template);
+          }
+        }
 
         _imageryIndex.query = whichPolygon({ type: 'FeatureCollection', features: features });
 
@@ -109,20 +117,18 @@ export function rendererBackground(context) {
 
 
     let baseFilter = '';
-    if (detected.cssfilters) {
-      if (_brightness !== 1) {
-        baseFilter += ` brightness(${_brightness})`;
-      }
-      if (_contrast !== 1) {
-        baseFilter += ` contrast(${_contrast})`;
-      }
-      if (_saturation !== 1) {
-        baseFilter += ` saturate(${_saturation})`;
-      }
-      if (_sharpness < 1) {  // gaussian blur
-        const blur = d3_interpolateNumber(0.5, 5)(1 - _sharpness);
-        baseFilter += ` blur(${blur}px)`;
-      }
+    if (_brightness !== 1) {
+      baseFilter += ` brightness(${_brightness})`;
+    }
+    if (_contrast !== 1) {
+      baseFilter += ` contrast(${_contrast})`;
+    }
+    if (_saturation !== 1) {
+      baseFilter += ` saturate(${_saturation})`;
+    }
+    if (_sharpness < 1) {  // gaussian blur
+      const blur = d3_interpolateNumber(0.5, 5)(1 - _sharpness);
+      baseFilter += ` blur(${blur}px)`;
     }
 
     let base = selection.selectAll('.layer-background')
@@ -133,11 +139,7 @@ export function rendererBackground(context) {
       .attr('class', 'layer layer-background')
       .merge(base);
 
-    if (detected.cssfilters) {
-      base.style('filter', baseFilter || null);
-    } else {
-      base.style('opacity', _brightness);
-    }
+    base.style('filter', baseFilter || null);
 
 
     let imagery = base.selectAll('.layer-imagery')
@@ -152,7 +154,7 @@ export function rendererBackground(context) {
 
     let maskFilter = '';
     let mixBlendMode = '';
-    if (detected.cssfilters && _sharpness > 1) {  // apply unsharp mask
+    if (_sharpness > 1) {  // apply unsharp mask
       mixBlendMode = 'overlay';
       maskFilter = 'saturate(0) blur(3px) invert(1)';
 
@@ -164,7 +166,7 @@ export function rendererBackground(context) {
     }
 
     let mask = base.selectAll('.layer-unsharp-mask')
-      .data(detected.cssfilters && _sharpness > 1 ? [0] : []);
+      .data(_sharpness > 1 ? [0] : []);
 
     mask.exit()
       .remove();
@@ -205,34 +207,18 @@ export function rendererBackground(context) {
     const EPSILON = 0.01;
     const x = +meters[0].toFixed(2);
     const y = +meters[1].toFixed(2);
-    let hash = utilStringQs(window.location.hash);
+    const notableOffset = Math.abs(x) > EPSILON || Math.abs(y) > EPSILON;
 
     let id = currSource.id;
     if (id === 'custom') {
       id = `custom:${currSource.template()}`;
     }
 
-    if (id) {
-      hash.background = id;
-    } else {
-      delete hash.background;
-    }
-
-    if (o) {
-      hash.overlays = o;
-    } else {
-      delete hash.overlays;
-    }
-
-    if (Math.abs(x) > EPSILON || Math.abs(y) > EPSILON) {
-      hash.offset = `${x},${y}`;
-    } else {
-      delete hash.offset;
-    }
-
-    if (!window.mocha) {
-      window.location.replace('#' + utilQsString(hash, true));
-    }
+    patchHash({
+      background: id || null,
+      overlays: o || null,
+      offset: notableOffset ? `${x},${y}` : null
+    });
 
     let imageryUsed = [];
     let photoOverlaysUsed = [];
@@ -256,7 +242,10 @@ export function rendererBackground(context) {
       mapillary: 'Mapillary Images',
       'mapillary-map-features': 'Mapillary Map Features',
       'mapillary-signs': 'Mapillary Signs',
-      openstreetcam: 'OpenStreetCam Images'
+      kartaview: 'KartaView Images',
+      vegbilder: 'Norwegian Road Administration Images',
+      mapilio: 'Mapilio Images',
+      panoramax: 'Panoramax Images'
     };
 
     for (let layerID in photoOverlayLayers) {
@@ -281,9 +270,23 @@ export function rendererBackground(context) {
 
     const currSource = baseLayer.source();
 
+    // Recheck blocked sources only if we detect new blocklists pulled from the OSM API.
+    const osm = context.connection();
+    const blocklists = (osm && osm.imageryBlocklists()) || [];
+    const blocklistChanged = (blocklists.length !== _checkedBlocklists.length) ||
+      blocklists.some((regex, index) => String(regex) !== _checkedBlocklists[index]);
+
+    if (blocklistChanged) {
+      _imageryIndex.backgrounds.forEach(source => {
+        source.isBlocked = blocklists.some(regex => regex.test(source.template()));
+      });
+      _checkedBlocklists = blocklists.map(regex => String(regex));
+    }
+
     return _imageryIndex.backgrounds.filter(source => {
+      if (includeCurrent && currSource === source) return true;  // optionally always include the current imagery
+      if (source.isBlocked) return false;                        // even bundled sources may be blocked - #7905
       if (!source.polygon) return true;                          // always include imagery with worldwide coverage
-      if (includeCurrent && currSource === source) return true;  // optionally include the current imagery
       if (zoom && zoom < 6) return false;                        // optionally exclude local imagery at low zooms
       return visible[source.id];                                 // include imagery visible in given extent
     });
@@ -300,30 +303,26 @@ export function rendererBackground(context) {
   background.baseLayerSource = function(d) {
     if (!arguments.length) return baseLayer.source();
 
-    // test source against OSM imagery blacklists..
+    // test source against OSM imagery blocklists..
     const osm = context.connection();
     if (!osm) return background;
 
-    const blacklists = osm.imageryBlacklists();
+    const blocklists = osm.imageryBlocklists();
     const template = d.template();
     let fail = false;
     let tested = 0;
     let regex;
 
-    for (let i = 0; i < blacklists.length; i++) {
-      try {
-        regex = new RegExp(blacklists[i]);
-        fail = regex.test(template);
-        tested++;
-        if (fail) break;
-      } catch (e) {
-        /* noop */
-      }
+    for (let i = 0; i < blocklists.length; i++) {
+      regex = blocklists[i];
+      fail = regex.test(template);
+      tested++;
+      if (fail) break;
     }
 
     // ensure at least one test was run.
     if (!tested) {
-      regex = new RegExp('.*\.google(apis)?\..*/(vt|kh)[\?/].*([xyz]=.*){3}.*');
+      regex = /.*\.google(apis)?\..*\/(vt|kh)[\?\/].*([xyz]=.*){3}.*/;
       fail = regex.test(template);
     }
 
@@ -440,78 +439,90 @@ export function rendererBackground(context) {
   let _loadPromise;
 
   background.ensureLoaded = () => {
-
     if (_loadPromise) return _loadPromise;
 
-    function parseMapParams(qmap) {
-      if (!qmap) return false;
-      const params = qmap.split('/').map(Number);
-      if (params.length < 3 || params.some(isNaN)) return false;
-      return geoExtent([params[2], params[1]]);  // lon,lat
-    }
+    return _loadPromise = ensureImageryIndex();
+  };
+
+  background.init = () => {
+    const loadPromise = background.ensureLoaded();
 
     const hash = utilStringQs(window.location.hash);
-    const requested = hash.background || hash.layer;
-    let extent = parseMapParams(hash.map);
+    const requestedBackground = hash.background || hash.layer;
+    const lastUsedBackground = prefs('background-last-used');
 
-    return _loadPromise = ensureImageryIndex()
-      .then(imageryIndex => {
-        const first = imageryIndex.backgrounds.length && imageryIndex.backgrounds[0];
+    return loadPromise.then(imageryIndex => {
+      const extent = context.map().extent();
+      const validBackgrounds = background.sources(extent).filter(d => d.id !== 'none' && d.id !== 'custom');
+      const first = validBackgrounds.length && validBackgrounds[0];
+      const isLastUsedValid = !!validBackgrounds.find(d => d.id && d.id === lastUsedBackground);
 
-        let best;
-        if (!requested && extent) {
-          best = background.sources(extent).find(s => s.best());
-        }
-
-        // Decide which background layer to display
-        if (requested && requested.indexOf('custom:') === 0) {
-          const template = requested.replace(/^custom:/, '');
-          const custom = background.findSource('custom');
-          background.baseLayerSource(custom.template(template));
-          prefs('background-custom-template', template);
-        } else {
-          background.baseLayerSource(
-            background.findSource(requested) ||
-            best ||
-            background.findSource(prefs('background-last-used')) ||
-            background.findSource('Bing') ||
-            first ||
-            background.findSource('none')
-          );
-        }
-
-        const locator = imageryIndex.backgrounds.find(d => d.overlay && d.default);
-        if (locator) {
-          background.toggleOverlayLayer(locator);
-        }
-
-        const overlays = (hash.overlays || '').split(',');
-        overlays.forEach(overlay => {
-          overlay = background.findSource(overlay);
-          if (overlay) {
-            background.toggleOverlayLayer(overlay);
-          }
+      let best;
+      if (!requestedBackground && extent) {
+        const viewArea = extent.area();
+        best = validBackgrounds.find(s => {
+          if (!s.best() || s.overlay) return false;
+          let bbox = turf_bbox(turf_bboxClip(
+                { type: 'MultiPolygon', coordinates: [ s.polygon || [extent.polygon()] ] },
+                extent.rectangle()));
+          let area = geoExtent(bbox.slice(0,2), bbox.slice(2,4)).area();
+          return area / viewArea > 0.5; // min visible size: 50% of viewport area
         });
+      }
 
-        if (hash.gpx) {
-          const gpx = context.layers().layer('data');
-          if (gpx) {
-            gpx.url(hash.gpx, '.gpx');
-          }
+      // Decide which background layer to display
+      if (requestedBackground && requestedBackground.indexOf('custom:') === 0) {
+        const template = requestedBackground.replace(/^custom:/, '');
+        const custom = background.findSource('custom');
+        background.baseLayerSource(custom.template(template));
+        prefs('background-custom-template', template);
+      } else {
+        background.baseLayerSource(
+          background.findSource(requestedBackground) ||
+          best ||
+          isLastUsedValid && background.findSource(lastUsedBackground) ||
+          background.findSource('Bing') ||
+          first ||
+          background.findSource('none')
+        );
+      }
+
+      const locator = imageryIndex.backgrounds.find(d => d.overlay && d.default);
+      if (locator) {
+        background.toggleOverlayLayer(locator);
+      }
+
+      const overlays = (hash.overlays || '').split(',');
+      overlays.forEach(overlay => {
+        overlay = background.findSource(overlay);
+        if (overlay) {
+          background.toggleOverlayLayer(overlay);
         }
+      });
 
-        if (hash.offset) {
-          const offset = hash.offset
-            .replace(/;/g, ',')
-            .split(',')
-            .map(n => !isNaN(n) && n);
-
-          if (offset.length === 2) {
-            background.offset(geoMetersToOffset(offset));
-          }
+      if (hash.gpx) {
+        const gpx = context.layers().layer('data');
+        if (gpx) {
+          gpx.url(hash.gpx, '.gpx');
         }
-      })
-      .catch(() => { /* ignore */ });
+      }
+
+      if (hash.offset) {
+        const offset = hash.offset
+          .replace(/;/g, ',')
+          .split(',')
+          .map(n => !isNaN(n) && n);
+
+        if (offset.length === 2) {
+          background.offset(geoMetersToOffset(offset));
+        }
+      }
+    })
+    .catch(err => {
+      /* eslint-disable no-console */
+      console.error(err);
+      /* eslint-enable no-console */
+    });
   };
 
 

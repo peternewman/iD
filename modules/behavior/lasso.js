@@ -1,4 +1,4 @@
-import { event as d3_event, select as d3_select } from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 
 import { geoExtent, geoPointInPolygon } from '../geo';
 import { modeSelect } from '../modes/select';
@@ -16,7 +16,7 @@ export function behaviorLasso(context) {
         var lasso;
 
 
-        function pointerdown() {
+        function pointerdown(d3_event) {
             var button = 0;  // left
             if (d3_event.button === button && d3_event.shiftKey === true) {
                 lasso = null;
@@ -86,8 +86,8 @@ export function behaviorLasso(context) {
                             sharedParentNodes.indexOf(node2.id);
                     } else {
                         // vertices do not share a way; group them by their respective parent ways
-                        return parseFloat(parents1[0].id.slice(1)) -
-                            parseFloat(parents2[0].id.slice(1));
+                        return Number(parents1[0].id.slice(1)) -
+                            Number(parents2[0].id.slice(1));
                     }
 
                 } else if (parents1.length || parents2.length) {

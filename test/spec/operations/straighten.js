@@ -16,28 +16,28 @@ describe('iD.operationStraighten', function () {
             // w3 - way with 3 nodes connected to w2
             // w4 - way with 3 nodes connected to w3
             // w5 - way with 4 nodes not connected to any other nodes
-            graph = iD.coreGraph([
-                iD.osmNode({ id: 'n1', type: 'node' }),
-                iD.osmNode({ id: 'n2', type: 'node' }),
-                iD.osmNode({ id: 'n2-1', type: 'node' }),
-                iD.osmNode({ id: 'n3', type: 'node' }),
-                iD.osmNode({ id: 'n4', type: 'node' }),
-                iD.osmNode({ id: 'n5', type: 'node' }),
-                iD.osmNode({ id: 'n6', type: 'node' }),
-                iD.osmNode({ id: 'n7', type: 'node' }),
-                iD.osmNode({ id: 'n8', type: 'node' }),
-                iD.osmNode({ id: 'n9', type: 'node' }),
-                iD.osmNode({ id: 'n10', type: 'node' }),
-                iD.osmNode({ id: 'n11', type: 'node' }),
-                iD.osmNode({ id: 'n12', type: 'node' }),
-                iD.osmNode({ id: 'n13', type: 'node' }),
-                iD.osmWay({ id: 'w1', nodes: ['n1', 'n2'] }),
-                iD.osmWay({ id: 'w1-2', nodes: ['n2', 'n2-1'] }),
-                iD.osmWay({ id: 'w2', nodes: ['n2', 'n3', 'n4'] }),
-                iD.osmWay({ id: 'w2-2', nodes: ['n4', 'n13', 'n2'] }), // w-2 reversed
-                iD.osmWay({ id: 'w3', nodes: ['n4', 'n5', 'n6'] }),
-                iD.osmWay({ id: 'w4', nodes: ['n6', 'n7', 'n8'] }),
-                iD.osmWay({ id: 'w5', nodes: ['n9', 'n10', 'n11', 'n12'] }),
+            graph = new iD.coreGraph([
+                new iD.osmNode({ id: 'n1', type: 'node' }),
+                new iD.osmNode({ id: 'n2', type: 'node' }),
+                new iD.osmNode({ id: 'n2-1', type: 'node' }),
+                new iD.osmNode({ id: 'n3', type: 'node' }),
+                new iD.osmNode({ id: 'n4', type: 'node' }),
+                new iD.osmNode({ id: 'n5', type: 'node' }),
+                new iD.osmNode({ id: 'n6', type: 'node' }),
+                new iD.osmNode({ id: 'n7', type: 'node' }),
+                new iD.osmNode({ id: 'n8', type: 'node' }),
+                new iD.osmNode({ id: 'n9', type: 'node' }),
+                new iD.osmNode({ id: 'n10', type: 'node' }),
+                new iD.osmNode({ id: 'n11', type: 'node' }),
+                new iD.osmNode({ id: 'n12', type: 'node' }),
+                new iD.osmNode({ id: 'n13', type: 'node' }),
+                new iD.osmWay({ id: 'w1', nodes: ['n1', 'n2'] }),
+                new iD.osmWay({ id: 'w1-2', nodes: ['n2', 'n2-1'] }),
+                new iD.osmWay({ id: 'w2', nodes: ['n2', 'n3', 'n4'] }),
+                new iD.osmWay({ id: 'w2-2', nodes: ['n4', 'n13', 'n2'] }), // w-2 reversed
+                new iD.osmWay({ id: 'w3', nodes: ['n4', 'n5', 'n6'] }),
+                new iD.osmWay({ id: 'w4', nodes: ['n6', 'n7', 'n8'] }),
+                new iD.osmWay({ id: 'w5', nodes: ['n9', 'n10', 'n11', 'n12'] }),
             ]);
         });
 
@@ -91,12 +91,12 @@ describe('iD.operationStraighten', function () {
             expect(result).to.be.ok;
         });
 
-        it('is available for 2 selected nodes in non-adjacent ways, providing inbetween ways are selected', function () {
+        it('is available for 2 selected nodes in non-adjacent ways, providing in between ways are selected', function () {
             var result = iD.operationStraighten(fakeContext, ['n2', 'n7', 'w4', 'w1', 'w3', 'w2']).available();
             expect(result).to.be.ok;
         });
 
-        it('is available for 2 selected nodes in non-adjacent, non-same-directional ways, providing inbetween ways are selected', function () {
+        it('is available for 2 selected nodes in non-adjacent, non-same-directional ways, providing in between ways are selected', function () {
             var result = iD.operationStraighten(fakeContext, ['n2', 'n7', 'w4', 'w1', 'w3', 'w2-2']).available();
             expect(result).to.be.ok;
         });

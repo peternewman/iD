@@ -1,5 +1,5 @@
+import { marked } from 'marked';
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -54,11 +54,12 @@ export function uiInit(context) {
 
     var _lastPointerType;
 
+    var overMap;
 
     function render(container) {
 
         container
-            .on('click.ui', function() {
+            .on('click.ui', function(d3_event) {
                 // we're only concerned with the primary mouse button
                 if (d3_event.button !== 0) return;
 
@@ -92,7 +93,7 @@ export function uiInit(context) {
             // On iOS we disable pinch-to-zoom of the UI via the `touch-action`
             // CSS property, but on desktop Safari we need to manually cancel the
             // default gesture events.
-            container.on('gesturestart.ui gesturechange.ui gestureend.ui', function() {
+            container.on('gesturestart.ui gesturechange.ui gestureend.ui', function(d3_event) {
                 // disable pinch-to-zoom of the UI via multitouch trackpads on macOS Safari
                 d3_event.preventDefault();
             });
@@ -100,7 +101,7 @@ export function uiInit(context) {
 
         if ('PointerEvent' in window) {
             d3_select(window)
-                .on('pointerdown.ui pointerup.ui', function() {
+                .on('pointerdown.ui pointerup.ui', function(d3_event) {
                     var pointerType = d3_event.pointerType || 'mouse';
                     if (_lastPointerType !== pointerType) {
                         _lastPointerType = pointerType;
@@ -115,6 +116,7 @@ export function uiInit(context) {
         }
 
         container
+            .attr('lang', localizer.localeCode())
             .attr('dir', localizer.textDirection());
 
         // setup fullscreen keybindings (no button shown at this time)
@@ -126,13 +128,15 @@ export function uiInit(context) {
 
         map
             .on('hitMinZoom.ui', function() {
-                ui.flash.text(t('cannot_zoom'))();
+                ui.flash
+                    .iconName('#iD-icon-no')
+                    .label(t.append('cannot_zoom'))();
             });
 
         container
             .append('svg')
             .attr('id', 'ideditor-defs')
-            .call(svgDefs(context));
+            .call(ui.svgDefs);
 
         container
             .append('div')
@@ -157,21 +161,105 @@ export function uiInit(context) {
             .attr('dir', 'ltr')
             .call(map);
 
-        content
+        overMap = content
+            .append('div')
+            .attr('class', 'over-map');
+
+        // HACK: Mobile Safari 14 likes to select anything selectable when long-
+        // pressing, even if it's not targeted. This conflicts with long-pressing
+        // to show the edit menu. We add a selectable offscreen element as the first
+        // child to trick Safari into not showing the selection UI.
+        overMap
+            .append('div')
+            .attr('class', 'select-trap')
+            .text('t');
+
+        overMap
+            .call(uiMapInMap(context))
+            .call(uiNotice(context));
+
+        overMap
             .append('div')
             .attr('class', 'spinner')
             .call(uiSpinner(context));
 
-        // Add attribution and footer
-        var about = content
+        // Map controls
+        var controlsWrap = overMap
             .append('div')
-            .attr('class', 'map-footer');
+            .attr('class', 'map-controls-wrap');
 
-        about
+        var controls = controlsWrap
+            .append('div')
+            .attr('class', 'map-controls');
+
+        controls
+            .append('div')
+            .attr('class', 'map-control zoombuttons')
+            .call(uiZoom(context));
+
+        controls
+            .append('div')
+            .attr('class', 'map-control zoom-to-selection-control')
+            .call(uiZoomToSelection(context));
+
+        controls
+            .append('div')
+            .attr('class', 'map-control geolocate-control')
+            .call(uiGeolocate(context));
+
+        controlsWrap.on('wheel.mapControls', function(d3_event) {
+            if (!d3_event.deltaX) {
+                controlsWrap.node().scrollTop += d3_event.deltaY;
+            }
+        });
+
+        // Add panes
+        // This should happen after map is initialized, as some require surface()
+        var panes = overMap
+            .append('div')
+            .attr('class', 'map-panes');
+
+        var uiPanes = [
+            uiPaneBackground(context),
+            uiPaneMapData(context),
+            uiPaneIssues(context),
+            uiPanePreferences(context),
+            uiPaneHelp(context)
+        ];
+
+        uiPanes.forEach(function(pane) {
+            controls
+                .append('div')
+                .attr('class', 'map-control map-pane-control ' + pane.id + '-control')
+                .call(pane.renderToggleButton);
+
+            panes
+                .call(pane.renderPane);
+        });
+
+        ui.info = uiInfo(context);
+
+        overMap
+            .call(ui.info);
+
+        overMap
+            .append('div')
+            .attr('class', 'photoviewer')
+            .classed('al', true)       // 'al'=left,  'ar'=right
+            .classed('hide', true)
+            .call(ui.photoviewer);
+
+        overMap
             .append('div')
             .attr('class', 'attribution-wrap')
             .attr('dir', 'ltr')
             .call(uiAttribution(context));
+
+
+        // Add footer
+        var about = content
+            .append('div')
+            .attr('class', 'map-footer');
 
         about
             .append('div')
@@ -202,15 +290,30 @@ export function uiInit(context) {
             .append('ul')
             .attr('class', 'map-footer-list');
 
-        if (!context.embed()) {
+        aboutList
+            .append('li')
+            .attr('class', 'user-list')
+            .call(uiContributors(context));
+
+        var apiConnections = context.connection().apiConnections();
+        if (apiConnections && apiConnections.length > 1) {
             aboutList
-                .call(uiAccount(context));
+                .append('li')
+                .attr('class', 'source-switch')
+                .call(uiSourceSwitch(context)
+                    .keys(apiConnections)
+                );
         }
 
         aboutList
             .append('li')
-            .attr('class', 'version')
-            .call(uiVersion(context));
+            .attr('class', 'issues-info')
+            .call(uiIssuesInfo(context));
+
+        aboutList
+            .append('li')
+            .attr('class', 'feature-warning')
+            .call(uiFeatureInfo(context));
 
         var issueLinks = aboutList
             .append('li');
@@ -219,44 +322,31 @@ export function uiInit(context) {
             .append('a')
             .attr('target', '_blank')
             .attr('href', 'https://github.com/openstreetmap/iD/issues')
+            .attr('aria-label', t('report_a_bug'))
             .call(svgIcon('#iD-icon-bug', 'light'))
-            .call(uiTooltip().title(t('report_a_bug')).placement('top'));
+            .call(uiTooltip()
+                .title(() => t.append('report_a_bug'))
+                .placement('top'));
 
         issueLinks
             .append('a')
             .attr('target', '_blank')
             .attr('href', 'https://github.com/openstreetmap/iD/blob/develop/CONTRIBUTING.md#translating')
+            .attr('aria-label', t('help_translate'))
             .call(svgIcon('#iD-icon-translate', 'light'))
-            .call(uiTooltip().title(t('help_translate')).placement('top'));
+            .call(uiTooltip()
+                .title(() => t.append('help_translate'))
+                .placement('top'));
 
         aboutList
             .append('li')
-            .attr('class', 'feature-warning')
-            .attr('tabindex', -1)
-            .call(uiFeatureInfo(context));
+            .attr('class', 'version')
+            .call(uiVersion(context));
 
-        aboutList
-            .append('li')
-            .attr('class', 'issues-info')
-            .attr('tabindex', -1)
-            .call(uiIssuesInfo(context));
-
-        var apiConnections = context.apiConnections();
-        if (apiConnections && apiConnections.length > 1) {
+        if (!context.embed()) {
             aboutList
-                .append('li')
-                .attr('class', 'source-switch')
-                .attr('tabindex', -1)
-                .call(uiSourceSwitch(context)
-                    .keys(apiConnections)
-                );
+                .call(uiAccount(context));
         }
-
-        aboutList
-            .append('li')
-            .attr('class', 'user-list')
-            .attr('tabindex', -1)
-            .call(uiContributors(context));
 
 
         // Setup map dimensions and move map to initial center/zoom.
@@ -266,76 +356,9 @@ export function uiInit(context) {
 
         ui.hash = behaviorHash(context);
         ui.hash();
-        if (!ui.hash.hadHash) {
+        if (!ui.hash.hadLocation) {
             map.centerZoom([0, 0], 2);
         }
-
-
-        var overMap = content
-            .append('div')
-            .attr('class', 'over-map');
-
-        // Map controls
-        var controls = overMap
-            .append('div')
-            .attr('class', 'map-controls');
-
-        controls
-            .append('div')
-            .attr('class', 'map-control zoombuttons')
-            .call(uiZoom(context));
-
-        controls
-            .append('div')
-            .attr('class', 'map-control zoom-to-selection-control')
-            .call(uiZoomToSelection(context));
-
-        controls
-            .append('div')
-            .attr('class', 'map-control geolocate-control')
-            .call(uiGeolocate(context));
-
-        // Add panes
-        // This should happen after map is initialized, as some require surface()
-        var panes = overMap
-            .append('div')
-            .attr('class', 'map-panes');
-
-        var uiPanes = [
-            uiPaneBackground(context),
-            uiPaneMapData(context),
-            uiPaneIssues(context),
-            uiPanePreferences(context),
-            uiPaneHelp(context)
-        ];
-
-        uiPanes.forEach(function(pane) {
-            controls
-                .append('div')
-                .attr('class', 'map-control map-pane-control ' + pane.id + '-control')
-                .call(pane.renderToggleButton);
-
-            panes
-                .call(pane.renderPane);
-        });
-
-        ui.info = uiInfo(context);
-
-        // Add absolutely-positioned elements that sit on top of the map
-        // This should happen after the map is ready (center/zoom)
-        overMap
-            .call(uiMapInMap(context))
-            .call(ui.info)
-            .call(uiNotice(context));
-
-
-        overMap
-            .append('div')
-            .attr('class', 'photoviewer')
-            .classed('al', true)       // 'al'=left,  'ar'=right
-            .classed('hide', true)
-            .call(ui.photoviewer);
-
 
         // Bind events
         window.onbeforeunload = function() {
@@ -346,22 +369,26 @@ export function uiInit(context) {
         };
 
         d3_select(window)
-            .on('resize.editor', ui.onResize);
+            .on('resize.editor', function() {
+                ui.onResize();
+            });
 
 
         var panPixels = 80;
         context.keybinding()
-            .on('⌫', function() { d3_event.preventDefault(); })
-            .on([t('sidebar.key'), '`', '²', '@'], ui.sidebar.toggle)   // #5663, #6864 - common QWERTY, AZERTY
+            .on([t('sidebar.key'), '`', '²', '@'], (d3_event) => {
+                d3_event.preventDefault();
+                ui.sidebar.toggle();
+            })   // #5663, #6864 - common QWERTY, AZERTY
             .on('←', pan([panPixels, 0]))
             .on('↑', pan([0, panPixels]))
             .on('→', pan([-panPixels, 0]))
             .on('↓', pan([0, -panPixels]))
-            .on(uiCmd('⌘←'), pan([map.dimensions()[0], 0]))
-            .on(uiCmd('⌘↑'), pan([0, map.dimensions()[1]]))
-            .on(uiCmd('⌘→'), pan([-map.dimensions()[0], 0]))
-            .on(uiCmd('⌘↓'), pan([0, -map.dimensions()[1]]))
-            .on(uiCmd('⌘' + t('background.key')), function quickSwitch() {
+            .on(uiCmd('⌥←'), pan([map.dimensions()[0], 0]))
+            .on(uiCmd('⌥↑'), pan([0, map.dimensions()[1]]))
+            .on(uiCmd('⌥→'), pan([-map.dimensions()[0], 0]))
+            .on(uiCmd('⌥↓'), pan([0, -map.dimensions()[1]]))
+            .on(uiCmd('⌘' + t('background.key')), function quickSwitch(d3_event) {
                 if (d3_event) {
                     d3_event.stopImmediatePropagation();
                     d3_event.preventDefault();
@@ -374,12 +401,12 @@ export function uiInit(context) {
                     context.background().baseLayerSource(previousBackground);
                 }
             })
-            .on(t('area_fill.wireframe.key'), function toggleWireframe() {
+            .on(t('area_fill.wireframe.key'), function toggleWireframe(d3_event) {
                 d3_event.preventDefault();
                 d3_event.stopPropagation();
                 context.map().toggleWireframe();
             })
-            .on(uiCmd('⌥' + t('area_fill.wireframe.key')), function toggleOsmData() {
+            .on(uiCmd('⌥' + t('area_fill.wireframe.key')), function toggleOsmData(d3_event) {
                 d3_event.preventDefault();
                 d3_event.stopPropagation();
 
@@ -395,7 +422,7 @@ export function uiInit(context) {
                     }
                 }
             })
-            .on(t('map_data.highlight_edits.key'), function toggleHighlightEdited() {
+            .on(t('map_data.highlight_edits.key'), function toggleHighlightEdited(d3_event) {
                 d3_event.preventDefault();
                 context.map().toggleHighlightEdited();
             });
@@ -420,11 +447,11 @@ export function uiInit(context) {
             }
 
             context.container()
-                .call(uiShortcuts(context));
+                .call(ui.shortcuts);
         }
 
         var osm = context.connection();
-        var auth = uiLoading(context).message(t('loading_auth')).blocking(true);
+        var auth = uiLoading(context).message(t.addOrUpdate('loading_auth')).blocking(true);
 
         if (osm && auth) {
             osm
@@ -446,7 +473,7 @@ export function uiInit(context) {
 
 
         function pan(d) {
-            return function() {
+            return function(d3_event) {
                 if (d3_event.shiftKey) return;
                 if (context.container().select('.combobox').size()) return;
                 d3_event.preventDefault();
@@ -493,11 +520,15 @@ export function uiInit(context) {
         return _lastPointerType;
     };
 
+    ui.svgDefs = svgDefs(context);
+
     ui.flash = uiFlash(context);
 
     ui.sidebar = uiSidebar(context);
 
     ui.photoviewer = uiPhotoviewer(context);
+
+    ui.shortcuts = uiShortcuts(context);
 
     ui.onResize = function(withPan) {
         var map = context.map();
@@ -521,12 +552,11 @@ export function uiInit(context) {
         ui.checkOverflow('.top-toolbar');
         ui.checkOverflow('.map-footer-bar');
 
-        // Use outdated code so it works on Explorer
-        var resizeWindowEvent = document.createEvent('Event');
-
-        resizeWindowEvent.initEvent('resizeWindow', true, true);
-
-        document.dispatchEvent(resizeWindowEvent);
+        const event = new Event('resizeWindow', {
+            bubbles: true,
+            cancelable: true
+        });
+        document.dispatchEvent(event);
     };
 
 
@@ -536,36 +566,40 @@ export function uiInit(context) {
             delete _needWidth[selector];
         }
 
-        var element = d3_select(selector);
-        var scrollWidth = element.property('scrollWidth');
-        var clientWidth = element.property('clientWidth');
+        var selection = context.container().select(selector);
+        if (selection.empty()) return;
+
+        var scrollWidth = selection.property('scrollWidth');
+        var clientWidth = selection.property('clientWidth');
         var needed = _needWidth[selector] || scrollWidth;
 
         if (scrollWidth > clientWidth) {    // overflow happening
-            element.classed('narrow', true);
+            selection.classed('narrow', true);
             if (!_needWidth[selector]) {
                 _needWidth[selector] = scrollWidth;
             }
 
         } else if (scrollWidth >= needed) {
-            element.classed('narrow', false);
+            selection.classed('narrow', false);
         }
     };
 
     ui.togglePanes = function(showPane) {
-        var shownPanes = context.container().selectAll('.map-pane.shown');
+        var hidePanes = context.container().selectAll('.map-pane.shown');
 
         var side = localizer.textDirection() === 'ltr' ? 'right' : 'left';
 
-        shownPanes
-            .classed('shown', false);
+        hidePanes
+            .classed('shown', false)
+            .classed('hide', true);
 
         context.container().selectAll('.map-pane-control button')
             .classed('active', false);
 
         if (showPane) {
-            shownPanes
-                .style('display', 'none')
+            hidePanes
+                .classed('shown', false)
+                .classed('hide', true)
                 .style(side, '-500px');
 
             context.container().selectAll('.' + showPane.attr('pane') + '-control button')
@@ -573,10 +607,9 @@ export function uiInit(context) {
 
             showPane
                 .classed('shown', true)
-                .style('display', 'block');
-            if (shownPanes.empty()) {
+                .classed('hide', false);
+            if (hidePanes.empty()) {
                 showPane
-                    .style('display', 'block')
                     .style(side, '-500px')
                     .transition()
                     .duration(200)
@@ -586,14 +619,17 @@ export function uiInit(context) {
                     .style(side, '0px');
             }
         } else {
-            shownPanes
-                .style('display', 'block')
+            hidePanes
+                .classed('shown', true)
+                .classed('hide', false)
                 .style(side, '0px')
                 .transition()
                 .duration(200)
                 .style(side, '-500px')
                 .on('end', function() {
-                    d3_select(this).style('display', 'none');
+                    d3_select(this)
+                        .classed('shown', false)
+                        .classed('hide', true);
                 });
         }
     };
@@ -631,14 +667,18 @@ export function uiInit(context) {
             .triggerType(triggerType)
             .operations(operations);
 
-        // render the menu
-        context.map().supersurface.call(_editMenu);
+        // render the menu onto the overmap
+        overMap
+            .call(_editMenu);
     };
 
     ui.closeEditMenu = function() {
+        // try to regularly close the edit menu
+        _editMenu.close();
         // remove any existing menu no matter how it was added
-        context.map().supersurface
-            .select('.edit-menu').remove();
+        if (overMap !== undefined) {
+            overMap.select('.edit-menu').remove();
+        }
     };
 
 
@@ -647,7 +687,7 @@ export function uiInit(context) {
     context.uploader()
         .on('saveStarted.ui', function() {
             _saveLoading = uiLoading(context)
-                .message(t('save.uploading'))
+                .message(t.addOrUpdate('save.uploading'))
                 .blocking(true);
             context.container().call(_saveLoading);  // block input during upload
         })
@@ -655,6 +695,11 @@ export function uiInit(context) {
             _saveLoading.close();
             _saveLoading = d3_select(null);
         });
+
+    marked.use({
+        mangle: false,
+        headerIds: false,
+    });
 
     return ui;
 }

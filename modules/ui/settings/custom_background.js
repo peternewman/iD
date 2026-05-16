@@ -1,5 +1,5 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
-import marked from 'marked';
+import { marked } from 'marked';
 
 import { prefs } from '../../core/preferences';
 import { t } from '../../core/localizer';
@@ -19,7 +19,7 @@ export function uiSettingsCustomBackground() {
             template: prefs('background-custom-template')
         };
 
-        var example = 'https://{switch:a,b,c}.tile.openstreetmap.org/{zoom}/{x}/{y}.png';
+        var example = 'https://tile.openstreetmap.org/{zoom}/{x}/{y}.png';
         var modal = uiConfirm(selection).okButton();
 
         modal
@@ -27,29 +27,33 @@ export function uiSettingsCustomBackground() {
 
         modal.select('.modal-section.header')
             .append('h3')
-            .text(t('settings.custom_background.header'));
+            .call(t.append('settings.custom_background.header'));
 
 
         var textSection = modal.select('.modal-section.message-text');
 
-        var instructions =
-            `${t('settings.custom_background.instructions.info')}\n` +
-            '\n' +
-            `#### ${t('settings.custom_background.instructions.wms.tokens_label')}\n` +
-            `* ${t('settings.custom_background.instructions.wms.tokens.proj')}\n` +
-            `* ${t('settings.custom_background.instructions.wms.tokens.wkid')}\n` +
-            `* ${t('settings.custom_background.instructions.wms.tokens.dimensions')}\n` +
-            `* ${t('settings.custom_background.instructions.wms.tokens.bbox')}\n` +
-            '\n' +
-            `#### ${t('settings.custom_background.instructions.tms.tokens_label')}\n` +
-            `* ${t('settings.custom_background.instructions.tms.tokens.xyz')}\n` +
-            `* ${t('settings.custom_background.instructions.tms.tokens.flipped_y')}\n` +
-            `* ${t('settings.custom_background.instructions.tms.tokens.switch')}\n` +
-            `* ${t('settings.custom_background.instructions.tms.tokens.quadtile')}\n` +
-            `* ${t('settings.custom_background.instructions.tms.tokens.scale_factor')}\n` +
-            '\n' +
-            `#### ${t('settings.custom_background.instructions.example')}\n` +
-            `\`${example}\``;
+        var instructions = `
+${t.html('settings.custom_background.instructions.info')}
+
+${t.html('settings.custom_background.instructions.license_disclaimer')}
+[${t.html('settings.custom_background.instructions.license_faq')}](${t('settings.custom_background.instructions.license_faq_url')})
+
+#### ${t.html('settings.custom_background.instructions.wms.tokens_label')}
+* ${t.html('settings.custom_background.instructions.wms.tokens.proj')}
+* ${t.html('settings.custom_background.instructions.wms.tokens.wkid')}
+* ${t.html('settings.custom_background.instructions.wms.tokens.dimensions')}
+* ${t.html('settings.custom_background.instructions.wms.tokens.bbox')}
+
+#### ${t.html('settings.custom_background.instructions.tms.tokens_label')}
+* ${t.html('settings.custom_background.instructions.tms.tokens.xyz')}
+* ${t.html('settings.custom_background.instructions.tms.tokens.flipped_y')}
+* ${t.html('settings.custom_background.instructions.tms.tokens.switch')}
+* ${t.html('settings.custom_background.instructions.tms.tokens.quadtile')}
+* ${t.html('settings.custom_background.instructions.tms.tokens.scale_factor')}
+
+#### ${t.html('settings.custom_background.instructions.example')}
+    ${example}
+`;
 
         textSection
             .append('div')
@@ -70,7 +74,7 @@ export function uiSettingsCustomBackground() {
         buttonSection
             .insert('button', '.ok-button')
             .attr('class', 'button cancel-button secondary-action')
-            .text(t('confirm.cancel'));
+            .call(t.append('confirm.cancel'));
 
 
         buttonSection.select('.cancel-button')

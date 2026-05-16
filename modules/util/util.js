@@ -1,7 +1,8 @@
+import { color as d3_color } from 'd3';
 import { remove as removeDiacritics } from 'diacritics';
+
 import { fixRTLTextForSvg, rtlRegex } from './svg_paths_rtl_fix';
 
-import { presetManager } from '../presets';
 import { t, localizer } from '../core/localizer';
 import { utilArrayUnion } from './array';
 import { utilDetect } from './detect';
@@ -29,8 +30,13 @@ export function utilTotalExtent(array, graph) {
     return extent;
 }
 
-
+/**
+ * @typedef {{ type: '-' | '+'; key: string; oldVal: string; newVal: string; display: string; }} TagDiff
+ * @param {Tags} oldTags
+ * @param {Tags} newTags
+ */
 export function utilTagDiff(oldTags, newTags) {
+    /** @type {TagDiff[]} */
     var tagDiff = [];
     var keys = utilArrayUnion(Object.keys(oldTags), Object.keys(newTags)).sort();
     keys.forEach(function(k) {
@@ -178,28 +184,128 @@ export function utilGetAllNodes(ids, graph) {
     }
 }
 
-
-export function utilDisplayName(entity) {
+/**
+ * @param {iD.OsmEntity} entity the entity to generate a display name for
+ * @param {object} flags a set of flags to tweak the display name output:
+ *             - hideNetwork: If true, the `network` tag will not be used
+ *                            in the name to prevent it being shown twice
+ *                            (see PR #8707#discussion_r712658175)
+ *             - hideRef:     If true, the `ref` tag will not be output.
+ *             - isMapLabel:  If true, this name is for a label on the map.
+ *                            If falsy, it's for a label elsewhere in the UI.
+ */
+export function utilDisplayName(entity, flags) {
     var localizedNameKey = 'name:' + localizer.languageCode().toLowerCase();
     var name = entity.tags[localizedNameKey] || entity.tags.name || '';
-    var network = entity.tags.cycle_network || entity.tags.network;
 
-    if (!name && entity.tags.ref) {
-        name = entity.tags.ref;
-        if (network) {
-            name = network + ' ' + name;
+    var tags = {
+        direction: entity.tags.direction,
+        from: entity.tags.from,
+        name,
+        network: flags?.hideNetwork ? undefined : (entity.tags.cycle_network || entity.tags.network),
+        ref: flags?.hideRef ? undefined : entity.tags.ref,
+        to: entity.tags.to,
+        via: entity.tags.via
+    };
+
+    // A right or left-right arrow likely indicates a formulaic “name” as specified by the Public Transport v2 schema.
+    // This name format already contains enough details to disambiguate the feature; avoid duplicating these details.
+    if (entity.tags.route && entity.tags.name && entity.tags.name.match(/[→⇒↔⇔]|[-=]>/)) {
+        return entity.tags.name;
+    }
+
+    // Non-routes tend to be labeled in many places besides the relation lists, such as the map, where brevity is important.
+    if (!entity.tags.route && name) {
+        return name;
+    }
+
+    var keyComponents = [];
+
+    if (tags.network) {
+        keyComponents.push('network');
+    }
+    if (tags.ref) {
+        keyComponents.push('ref');
+    }
+    if (tags.name) {
+        keyComponents.push('name');
+    }
+
+    // Routes may need more disambiguation based on direction or destination
+    if (entity.tags.route) {
+        if (tags.direction) {
+            keyComponents.push('direction');
+        } else if (tags.from && tags.to) {
+            keyComponents.push('from');
+            keyComponents.push('to');
+            if (tags.via) {
+                keyComponents.push('via');
+            }
         }
     }
 
-    return name;
+    if (keyComponents.length) {
+        return t('inspector.display_name.' + keyComponents.join('_'), tags);
+    }
+
+    const alternativeNameKeys = [
+        'addr:housename',
+        'alt_name',
+        'official_name',
+        'loc_name',
+        'loc_ref',
+        'unsigned_ref',
+        'seamark:name',
+        'sector:name',
+        'lock_name'
+    ];
+
+    if (entity.tags.highway === 'milestone' || entity.tags.railway === 'milestone') {
+        // distance & railway:position are only valid as names when used on a milestone
+        alternativeNameKeys.push('distance', 'railway:position');
+    }
+
+    // if there's still no name found, try some other name-like tags
+    for (const key of alternativeNameKeys) {
+        if (key in entity.tags) {
+            return entity.tags[key];
+        }
+    }
+
+    // as a last resort, use the street address as a name.
+    const unit = entity.tags['addr:unit'];
+    const housenumber = entity.tags['addr:housenumber'];
+    const streetOrPlace = entity.tags['addr:street'] || entity.tags['addr:place'];
+
+    if (!flags?.isMapLabel && unit && housenumber && streetOrPlace) {
+        return t('inspector.display_name_addr_with_unit', {
+            unit,
+            housenumber,
+            streetOrPlace,
+        });
+    }
+
+    if (!flags?.isMapLabel && housenumber && streetOrPlace) {
+        return t('inspector.display_name_addr', {
+            housenumber,
+            streetOrPlace,
+        });
+    }
+
+    // the housenumber can always be used, regardless of isMapLabel
+    if (housenumber) return housenumber;
+
+    // no match found
+    return '';
 }
 
 
 export function utilDisplayNameForPath(entity) {
-    var name = utilDisplayName(entity);
+    var name = utilDisplayName(entity, { isMapLabel: true });
     var isFirefox = utilDetect().browser.toLowerCase().indexOf('firefox') > -1;
+    var isNewChromium = Number(utilDetect().version.split('.')[0]) >= 96.0;
 
-    if (!isFirefox && name && rtlRegex.test(name)) {
+    if (!isFirefox && !isNewChromium && name && rtlRegex.test(name)) {
         name = fixRTLTextForSvg(name);
     }
 
@@ -213,22 +319,6 @@ export function utilDisplayType(id) {
         w: t('inspector.way'),
         r: t('inspector.relation')
     }[id.charAt(0)];
-}
-
-
-export function utilDisplayLabel(entity, graph) {
-    var displayName = utilDisplayName(entity);
-    if (displayName) {
-        // use the display name if there is one
-        return displayName;
-    }
-    var preset = presetManager.match(entity, graph);
-    if (preset && preset.name()) {
-        // use the preset name if there is a match
-        return preset.name();
-    }
-    // fallback to the display type (node/way/relation)
-    return utilDisplayType(entity.id);
 }
 
 
@@ -264,6 +354,7 @@ export function utilCombinedTags(entityIDs, graph) {
     var tags = {};
     var tagCounts = {};
     var allKeys = new Set();
+    var allTags = [];
 
     var entities = entityIDs.map(function(entityID) {
         return graph.hasEntity(entityID);
@@ -278,6 +369,7 @@ export function utilCombinedTags(entityIDs, graph) {
     });
 
     entities.forEach(function(entity) {
+        allTags.push(entity.tags);
 
         allKeys.forEach(function(key) {
 
@@ -306,12 +398,11 @@ export function utilCombinedTags(entityIDs, graph) {
         });
     });
 
-    for (var key in tags) {
+    for (const key in tags) {
         if (!Array.isArray(tags[key])) continue;
 
         // sort values by frequency then alphabetically
         tags[key] = tags[key].sort(function(val1, val2) {
-            var key = key; // capture
             var count2 = tagCounts[key + '=' + val2];
             var count1 = tagCounts[key + '=' + val1];
             if (count2 !== count1) {
@@ -324,36 +415,27 @@ export function utilCombinedTags(entityIDs, graph) {
         });
     }
 
+    tags = Object.defineProperty(tags, Symbol.for('allTags'), { enumerable: false, value: allTags });
     return tags;
 }
 
 
 export function utilStringQs(str) {
-    var i = 0;  // advance past any leading '?' or '#' characters
-    while (i < str.length && (str[i] === '?' || str[i] === '#')) i++;
-    str = str.slice(i);
-
-    return str.split('&').reduce(function(obj, pair){
-        var parts = pair.split('=');
-        if (parts.length === 2) {
-            obj[parts[0]] = (null === parts[1]) ? '' : decodeURIComponent(parts[1]);
-        }
-        return obj;
-    }, {});
+    str = str.replace(/^[#?]{0,2}/, ''); // advance past any leading '?' or '#' characters
+    return Object.fromEntries(new URLSearchParams(str));
 }
 
 
-export function utilQsString(obj, noencode) {
-    // encode everything except special characters used in certain hash parameters:
-    // "/" in map states, ":", ",", {" and "}" in background
-    function softEncode(s) {
-        return encodeURIComponent(s).replace(/(%2F|%3A|%2C|%7B|%7D)/g, decodeURIComponent);
+export function utilQsString(obj, softEncode) {
+    let str = new URLSearchParams(obj).toString();
+    if (softEncode) {
+        // for better readability of URL hashes: optionally
+        // leave some special characters unescaped
+        //   "/" used in map state
+        //   ":", ",", {" and "}" used in background param
+        str = str.replace(/(%2F|%3A|%2C|%7B|%7D)/g, decodeURIComponent);
     }
-
-    return Object.keys(obj).sort().map(function(key) {
-        return encodeURIComponent(key) + '=' + (
-            noencode ? softEncode(obj[key]) : encodeURIComponent(obj[key]));
-    }).join('&');
+    return str;
 }
 
 
@@ -363,10 +445,9 @@ export function utilPrefixDOMProperty(property) {
     var n = prefixes.length;
     var s = document.body;
 
-    if (property in s)
-        return property;
+    if (property in s) return property;
 
-    property = property.substr(0, 1).toUpperCase() + property.substr(1);
+    property = property.slice(0, 1).toUpperCase() + property.slice(1);
 
     while (++i < n) {
         if (prefixes[i] + property in s) {
@@ -400,7 +481,8 @@ export function utilPrefixCSSProperty(property) {
 
 var transformProperty;
 export function utilSetTransform(el, x, y, scale) {
-    var prop = transformProperty = transformProperty || utilPrefixCSSProperty('Transform');
+    transformProperty ||= utilPrefixCSSProperty('Transform');
+    var prop = transformProperty;
     var translate = utilDetect().opera ? 'translate('   + x + 'px,' + y + 'px)'
         : 'translate3d(' + x + 'px,' + y + 'px,0)';
     return el.style(prop, translate + (scale ? ' scale(' + scale + ')' : ''));
@@ -416,8 +498,9 @@ export function utilEditDistance(a, b) {
     if (a.length === 0) return b.length;
     if (b.length === 0) return a.length;
     var matrix = [];
-    for (var i = 0; i <= b.length; i++) { matrix[i] = [i]; }
-    for (var j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+    var i, j;
+    for (i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+    for (j = 0; j <= a.length; j++) { matrix[0][j] = j; }
     for (i = 1; i <= b.length; i++) {
         for (j = 1; j <= a.length; j++) {
             if (b.charAt(i-1) === a.charAt(j-1)) {
@@ -445,7 +528,8 @@ export function utilFastMouse(container) {
     return function(e) {
         return [
             e.clientX - rectLeft - clientLeft,
-            e.clientY - rectTop - clientTop];
+            e.clientY - rectTop - clientTop
+        ];
     };
 }
 
@@ -497,6 +581,10 @@ export function utilNoAuto(selection) {
         .attr('autocomplete', 'new-password')
         .attr('autocorrect', 'off')
         .attr('autocapitalize', 'off')
+        .attr('data-1p-ignore', 'true')  // 1Password
+        .attr('data-bwignore', 'true')   // Bitwarden
+        .attr('data-form-type', 'other') // Dashlane
+        .attr('data-lpignore', 'true')   // LastPass
         .attr('spellcheck', isText ? 'true' : 'false');
 }
 
@@ -541,4 +629,107 @@ export function utilUnicodeCharsCount(str) {
 // in unicode characters. Note that this runs the risk of splitting graphemes.
 export function utilUnicodeCharsTruncated(str, limit) {
     return Array.from(str).slice(0, limit).join('');
+}
+
+function toNumericID(id) {
+    var match = id.match(/^[cnwr](-?\d+)$/);
+    if (match) {
+        return parseInt(match[1], 10);
+    }
+    return NaN;
+}
+
+function compareNumericIDs(left, right) {
+    if (isNaN(left) && isNaN(right)) return -1;
+    if (isNaN(left)) return 1;
+    if (isNaN(right)) return -1;
+    if (Math.sign(left) !== Math.sign(right)) return -Math.sign(left);
+    if (Math.sign(left) < 0) return Math.sign(right - left);
+    return Math.sign(left - right);
+}
+
+// Returns -1 if the first parameter ID is older than the second,
+// 1 if the second parameter is older, 0 if they are the same.
+// If both IDs are test IDs, the function returns -1.
+export function utilCompareIDs(left, right) {
+    return compareNumericIDs(toNumericID(left), toNumericID(right));
+}
+
+// Returns the chronologically oldest ID in the list.
+// Database IDs (with positive numbers) before editor ones (with negative numbers).
+// Among each category, the closest number to 0 is the oldest.
+// Test IDs (any string that does not conform to OSM's ID scheme) are taken last.
+export function utilOldestID(ids) {
+    if (ids.length === 0) {
+        return undefined;
+    }
+
+    var oldestIDIndex = 0;
+    var oldestID = toNumericID(ids[0]);
+
+    for (var i = 1; i < ids.length; i++) {
+        var num = toNumericID(ids[i]);
+
+        if (compareNumericIDs(oldestID, num) === 1) {
+            oldestIDIndex = i;
+            oldestID = num;
+        }
+    }
+
+    return ids[oldestIDIndex];
+}
+
+// returns a normalized and truncated string to `maxChars` utf-8 characters
+export function utilCleanOsmString(val, maxChars) {
+    // be lenient with input
+    if (val === undefined || val === null) {
+      val = '';
+    } else {
+      val = val.toString();
+    }
+
+    // remove whitespace
+    val = val.trim();
+
+    // use the canonical form of the string
+    if (val.normalize) val = val.normalize('NFC');
+
+    // trim to the number of allowed characters
+    return utilUnicodeCharsTruncated(val, maxChars);
+}
+
+// https://stackoverflow.com/a/70360753/1627467
+export function getLuma(color) {
+    const {r, g, b} = d3_color(color);
+    return 0.2999 * r + 0.587 * g + 0.114 * b;
+}
+
+/** @param {XMLHttpRequestBodyInit} input */
+export function utilGzip(input) {
+    // check if compression is supported natively
+    if (!globalThis.CompressionStream) return undefined;
+
+    try {
+        const stream = new Response(input).body.pipeThrough(
+            new CompressionStream('gzip')
+        );
+        return new Response(stream).blob();
+     } catch {
+        // if an error is thrown, it means the browser supports
+        // CompressionStream but not the specific algorithm.
+        return undefined;
+    }
+}
+
+/** @param {string} url */
+export function utilIsValidURL(url, strict = false) {
+    try {
+        // First try strict WHATWG parsing
+        const link = new URL(url);
+        return link.protocol.startsWith('http');
+    } catch {
+        if (strict) return false;
+        // Fallback: accept if it looks like a valid scheme://something, even if semicolons are present
+        return /^https?:\/\/\S+$/i.test(url);
+    }
 }

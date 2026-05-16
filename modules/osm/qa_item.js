@@ -1,4 +1,3 @@
-
 export class QAItem {
   constructor(loc, service, itemType, id, props) {
     // Store required properties
@@ -15,12 +14,10 @@ export class QAItem {
     if (service && typeof service.getIcon === 'function') {
       this.icon = service.getIcon(itemType);
     }
-
-    return this;
   }
 
   update(props) {
-    // You can't override this inital information
+    // You can't override this initial information
     const { loc, service, itemType, id } = this;
 
     Object.keys(props).forEach(prop => this[prop] = props[prop]);

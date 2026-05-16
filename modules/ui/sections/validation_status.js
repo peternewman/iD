@@ -1,4 +1,4 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 
 import { svgIcon } from '../../svg/icon';
 import { prefs } from '../../core/preferences';
@@ -78,9 +78,10 @@ export function uiSectionValidationStatus(context) {
             .merge(resetIgnoredEnter);
 
         resetIgnored.select('a')
-            .text(t('issues.reset_ignored', { count: ignoredIssues.length.toString() }));
+            .call(t.addOrUpdate('inspector.title_count', { title: t.append('issues.reset_ignored'), count: ignoredIssues.length }));
 
-        resetIgnored.on('click', function() {
+        resetIgnored.on('click', function(d3_event) {
+            d3_event.preventDefault();
             context.validator().resetIgnoredIssues();
         });
     }
@@ -95,7 +96,8 @@ export function uiSectionValidationStatus(context) {
                 var hiddenIssues = context.validator().getIssues(hiddenOpts);
                 if (hiddenIssues.length) {
                     selection.select('.box .details')
-                        .text(t(
+                        .html('')
+                        .call(t.append(
                             'issues.no_issues.hidden_issues.' + type,
                             { count: hiddenIssues.length.toString() }
                         ));
@@ -103,7 +105,8 @@ export function uiSectionValidationStatus(context) {
                 }
             }
             selection.select('.box .details')
-                .text(t('issues.no_issues.hidden_issues.none'));
+                .html('')
+                .call(t.append('issues.no_issues.hidden_issues.none'));
         }
 
         var messageType;
@@ -158,7 +161,8 @@ export function uiSectionValidationStatus(context) {
         }
 
         selection.select('.box .message')
-            .text(t('issues.no_issues.message.' + messageType));
+            .html('')
+            .call(t.append('issues.no_issues.message.' + messageType));
 
     }
 
@@ -167,7 +171,7 @@ export function uiSectionValidationStatus(context) {
     });
 
     context.map().on('move.uiSectionValidationStatus',
-        _debounce(function() {
+        debounce(function() {
             window.requestIdleCallback(section.reRender);
         }, 1000)
     );

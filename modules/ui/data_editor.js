@@ -1,7 +1,7 @@
 import { t } from '../core/localizer';
 import { modeBrowse } from '../modes/browse';
 import { svgIcon } from '../svg/icon';
-
+import { stringifyProperties } from '../util/object';
 import { uiDataHeader } from './data_header';
 import { uiSectionRawTagEditor } from './sections/raw_tag_editor';
 
@@ -10,7 +10,7 @@ export function uiDataEditor(context) {
     var dataHeader = uiDataHeader();
     var rawTagEditor = uiSectionRawTagEditor('custom-data-tag-editor', context)
         .expandedByDefault(true)
-        .readOnlyTags([/./]);
+        .readOnlyTags([/.*/]);
     var _datum;
 
 
@@ -26,14 +26,15 @@ export function uiDataEditor(context) {
         headerEnter
             .append('button')
             .attr('class', 'close')
+            .attr('title', t('icons.close'))
             .on('click', function() {
                 context.enter(modeBrowse(context));
             })
             .call(svgIcon('#iD-icon-close'));
 
         headerEnter
-            .append('h3')
-            .text(t('map_data.title'));
+            .append('h2')
+            .call(t.append('map_data.title'));
 
 
         var body = selection.selectAll('.body')
@@ -63,7 +64,7 @@ export function uiDataEditor(context) {
             .attr('class', 'raw-tag-editor data-editor')
             .merge(rte)
             .call(rawTagEditor
-                .tags((_datum && _datum.properties) || {})
+                .tags(stringifyProperties(_datum?.properties || {}))
                 .state('hover')
                 .render
             )

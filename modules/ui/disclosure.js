@@ -1,79 +1,94 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
-import { event as d3_event } from 'd3-selection';
 
 import { prefs } from '../core/preferences';
 import { svgIcon } from '../svg/icon';
 import { utilFunctor } from '../util';
 import { utilRebind } from '../util/rebind';
 import { uiToggle } from './toggle';
-import { localizer } from '../core/localizer';
+import { t, localizer } from '../core/localizer';
 
 
 export function uiDisclosure(context, key, expandedDefault) {
-    var dispatch = d3_dispatch('toggled');
-    var _expanded;
-    var _title = utilFunctor('');
-    var _updatePreference = true;
-    var _content = function () {};
+    const dispatch = d3_dispatch('toggled');
+    let _expanded;
+    let _label = utilFunctor('');
+    let _updatePreference = true;
+    let _content = function () {};
 
 
-    var disclosure = function(selection) {
+    const disclosure = function(selection) {
 
         if (_expanded === undefined || _expanded === null) {
             // loading _expanded here allows it to be reset by calling `disclosure.expanded(null)`
 
-            var preference = prefs('disclosure.' + key + '.expanded');
+            const preference = prefs('disclosure.' + key + '.expanded');
             _expanded = preference === null ? !!expandedDefault : (preference === 'true');
         }
 
-        var hideToggle = selection.selectAll('.hide-toggle-' + key)
+        let details = selection.selectAll('.disclosure-wrap-' + key)
             .data([0]);
 
         // enter
-        var hideToggleEnter = hideToggle.enter()
-            .append('a')
-            .attr('href', '#')
+        const detailsEnter = details.enter()
+            .append('details')
+            .attr('class', 'disclosure-wrap disclosure-wrap-' + key);
+
+        const summaryEnter = detailsEnter
+            .append('summary')
             .attr('class', 'hide-toggle hide-toggle-' + key)
             .call(svgIcon('', 'pre-text', 'hide-toggle-icon'));
 
-        hideToggleEnter
+        summaryEnter
             .append('span')
             .attr('class', 'hide-toggle-text');
 
-        // update
-        hideToggle = hideToggleEnter
-            .merge(hideToggle);
-
-        hideToggle
-            .on('click', toggle)
-            .classed('expanded', _expanded);
-
-        hideToggle.selectAll('.hide-toggle-text')
-            .text(_title());
-
-        hideToggle.selectAll('.hide-toggle-icon')
-            .attr('xlink:href', _expanded ? '#iD-icon-down'
-                : (localizer.textDirection() === 'rtl') ? '#iD-icon-backward' : '#iD-icon-forward'
-            );
-
-
-        var wrap = selection.selectAll('.disclosure-wrap')
-            .data([0]);
-
-        // enter/update
-        wrap = wrap.enter()
+        detailsEnter
             .append('div')
-            .attr('class', 'disclosure-wrap disclosure-wrap-' + key)
-            .merge(wrap)
-            .classed('hide', !_expanded);
+            .attr('class', 'disclosure-content');
+
+        // update
+        details = detailsEnter
+            .merge(details);
+
+        details
+            .property('open', _expanded);
+
+        const summary = details.selectAll('summary.hide-toggle');
+
+        summary
+            .on('click', toggle);
+
+        updateSummary();
+
+        const label = _label();
+        const labelSelection = summary.selectAll('.hide-toggle-text');
+        if (typeof label !== 'function') {
+            labelSelection.text(label);
+        } else {
+            labelSelection.text('').call(label);
+        }
+
+        const contentWrap = details.selectAll('.disclosure-content');
 
         if (_expanded) {
-            wrap
+            contentWrap
                 .call(_content);
         }
 
 
-        function toggle() {
+        function updateSummary() {
+            summary
+                .classed('expanded', _expanded)
+                .attr('title', t(`icons.${_expanded ? 'collapse' : 'expand'}`));
+
+            summary.selectAll('.hide-toggle-icon')
+                .attr('xlink:href', _expanded ? '#iD-icon-down'
+                    : (localizer.textDirection() === 'rtl') ? '#iD-icon-backward' : '#iD-icon-forward'
+                );
+        }
+
+
+        function toggle(d3_event) {
             d3_event.preventDefault();
 
             _expanded = !_expanded;
@@ -82,20 +97,12 @@ export function uiDisclosure(context, key, expandedDefault) {
                 prefs('disclosure.' + key + '.expanded', _expanded);
             }
 
-            hideToggle
-                .classed('expanded', _expanded);
+            updateSummary();
 
-            hideToggle.selectAll('.hide-toggle-icon')
-                .attr('xlink:href', _expanded ? '#iD-icon-down'
-                    : (localizer.textDirection() === 'rtl') ? '#iD-icon-backward' : '#iD-icon-forward'
-                );
-
-            wrap
-                .call(uiToggle(_expanded));
+            contentWrap.call(uiToggle(_expanded));
 
             if (_expanded) {
-                wrap
-                    .call(_content);
+                contentWrap.call(_content);
             }
 
             dispatch.call('toggled', this, _expanded);
@@ -103,9 +110,9 @@ export function uiDisclosure(context, key, expandedDefault) {
     };
 
 
-    disclosure.title = function(val) {
-        if (!arguments.length) return _title;
-        _title = utilFunctor(val);
+    disclosure.label = function(val) {
+        if (!arguments.length) return _label;
+        _label = utilFunctor(val);
         return disclosure;
     };
 

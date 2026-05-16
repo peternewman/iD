@@ -1,11 +1,10 @@
-
 import { actionCopyEntities } from '../actions/copy_entities';
 import { actionMove } from '../actions/move';
 import { modeSelect } from '../modes/select';
 import { geoExtent, geoVecSubtract } from '../geo';
 import { t } from '../core/localizer';
 import { uiCmd } from '../ui/cmd';
-import { utilDisplayLabel } from '../util/util';
+import { utilDisplayLabel } from '../util/utilDisplayLabel';
 
 // see also `behaviorPaste`
 export function operationPaste(context) {
@@ -76,23 +75,22 @@ export function operationPaste(context) {
         var oldGraph = context.copyGraph();
         var ids = context.copyIDs();
         if (!ids.length) {
-            return t('operations.paste.nothing_copied');
+            return t.append('operations.paste.nothing_copied');
         }
-        return ids.length === 1 ?
-            t('operations.paste.description.single', { feature: utilDisplayLabel(oldGraph.entity(ids[0]), oldGraph) }) :
-            t('operations.paste.description.multiple', { n: ids.length.toString() });
+        return t.append('operations.paste.description', {
+            feature: utilDisplayLabel(oldGraph.entity(ids[0]), oldGraph),
+            n: ids.length
+        });
     };
 
     operation.annotation = function() {
         var ids = context.copyIDs();
-        return ids.length === 1 ?
-            t('operations.paste.annotation.single') :
-            t('operations.paste.annotation.multiple', { n: ids.length.toString() });
+        return t('operations.paste.annotation', { n: ids.length });
     };
 
     operation.id = 'paste';
     operation.keys = [uiCmd('⌘V')];
-    operation.title = t('operations.paste.title');
+    operation.title = t.append('operations.paste.title');
 
     return operation;
 }

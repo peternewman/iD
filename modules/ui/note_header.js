@@ -1,3 +1,5 @@
+import { select as d3_select } from 'd3-selection';
+
 import { t } from '../core/localizer';
 import { svgIcon } from '../svg/icon';
 
@@ -31,20 +33,38 @@ export function uiNoteHeader() {
             .call(svgIcon('#iD-icon-note', 'note-fill'));
 
         iconEnter.each(function(d) {
-            var statusIcon = '#iD-icon-' + (d.id < 0 ? 'plus' : (d.status === 'open' ? 'close' : 'apply'));
+            var statusIcon;
+            if (d.id < 0) {
+                statusIcon = '#iD-icon-plus';
+            } else if (d.status === 'open') {
+                statusIcon = '#iD-icon-close';
+            } else {
+                statusIcon = '#iD-icon-apply';
+            }
             iconEnter
                 .append('div')
                 .attr('class', 'note-icon-annotation')
+                .attr('title', t('icons.close'))
                 .call(svgIcon(statusIcon, 'icon-annotation'));
         });
 
         headerEnter
             .append('div')
             .attr('class', 'note-header-label')
-            .text(function(d) {
-                if (_note.isNew()) { return t('note.new'); }
-                return t('note.note') + ' ' + d.id + ' ' +
-                    (d.status === 'closed' ? t('note.closed') : '');
+            .each(function(d) {
+                const selection = d3_select(this);
+                selection.text('');
+                if (_note.isNew()) {
+                    selection.call(t.append('note.new'));
+                } else {
+                    selection.call(t.append('note.note'));
+                    selection
+                        .append('span')
+                        .text(` ${d.id} `);
+                    if (d.status === 'closed') {
+                        selection.call(t.append('note.closed'));
+                    }
+                }
             });
     }
 

@@ -1,6 +1,9 @@
+import { fn } from '@vitest/spy';
+import { setTimeout } from 'node:timers/promises';
+
 describe('iD.serviceStreetside', function() {
     var dimensions = [64, 64];
-    var context, server, streetside;
+    var context, streetside;
 
     before(function() {
         iD.services.streetside = iD.serviceStreetside;
@@ -17,14 +20,12 @@ describe('iD.serviceStreetside', function() {
             .translate([-116508, 0])  // 10,0
             .clipExtent([[0,0], dimensions]);
 
-        server = window.fakeFetch().create();
         streetside = iD.services.streetside;
         streetside.reset();
     });
 
     afterEach(function() {
         window.JSONP_FIX = undefined;
-        server.restore();
     });
 
 
@@ -49,7 +50,7 @@ describe('iD.serviceStreetside', function() {
     });
 
     describe('#loadBubbles', function() {
-        it('fires loadedBubbles when bubbles are loaded', function(done) {
+        it('fires loadedImages when bubbles are loaded', async () => {
             // adjust projection so that only one tile is fetched
             // (JSONP hack will return the same data for every fetch)
             context.projection
@@ -57,68 +58,50 @@ describe('iD.serviceStreetside', function() {
                 .translate([-1863988.9381333336, 762.8270222954452])  // 10.002,0.002
                 .clipExtent([[0,0], dimensions]);
 
-            var spy = sinon.spy();
-            streetside.on('loadedBubbles', spy);
+            const spy = fn();
+            streetside.on('loadedImages', spy);
 
-            window.JSONP_DELAY = 0;
-            window.JSONP_FIX = [{
-                    elapsed: 0.001
-                }, {
-                    id: 1, la: 0, lo: 10.001, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:00 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: undefined, ne: 2
-                }, {
-                    id: 2, la: 0, lo: 10.002, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:01 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: 1, ne: 3
-                }, {
-                    id: 3, la: 0, lo: 10.003, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:02 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: 2, ne: undefined
-                }
-            ];
+            var mockData = {
+                resourceSets: [{
+                    resources: []
+                }]
+            };
+
+            fetchMock.mock(/MetaData\/Streetside/, {
+                body: JSON.stringify(mockData),
+                status: 200
+            });
 
             streetside.loadBubbles(context.projection, 0);  // 0 = don't fetch margin tiles
 
-            window.setTimeout(function() {
-                expect(spy).to.have.been.calledOnce;
-                done();
-            }, 200);
+            await setTimeout(200);
+            expect(spy).to.have.been.calledOnce;
         });
 
-        it('does not load bubbles around null island', function(done) {
+        it('does not load bubbles around null island', async () => {
             context.projection
                 .scale(iD.geoZoomToScale(18))
                 .translate([0, 0])
                 .clipExtent([[0,0], dimensions]);
 
-            var spy = sinon.spy();
-            streetside.on('loadedBubbles', spy);
+            const spy = fn();
+            streetside.on('loadedImages', spy);
 
-            window.JSONP_DELAY = 0;
-            window.JSONP_FIX = [{
-                    elapsed: 0.001
-                }, {
-                    id: 1, la: 0, lo: 0, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:00 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: undefined, ne: 2
-                }, {
-                    id: 2, la: 0, lo: 0, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:01 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: 1, ne: 3
-                }, {
-                    id: 3, la: 0, lo: 0, al: 0, ro: 0, pi: 0, he: 0, bl: '',
-                    cd: '1/1/2018 12:00:02 PM', ml: 3, nbn: [], pbn: [], rn: [],
-                    pr: 2, ne: undefined
-                }
-            ];
+            var mockData = {
+                resourceSets: [{
+                    resources: [{}]
+                }]
+            };
+
+            fetchMock.mock(/MetaData\/Streetside/, {
+                body: JSON.stringify(mockData),
+                status: 200
+            });
 
             streetside.loadBubbles(context.projection, 0);  // 0 = don't fetch margin tiles
 
-            window.setTimeout(function() {
-                expect(spy).to.have.been.not.called;
-                done();
-            }, 200);
+            await setTimeout(200);
+            expect(spy).to.have.been.not.called;
         });
     });
 

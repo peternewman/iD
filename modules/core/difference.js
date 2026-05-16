@@ -1,4 +1,4 @@
-import deepEqual from 'fast-deep-equal';
+import { deepEqual } from 'fast-equals';
 
 import { geoVecEqual } from '../geo';
 import { utilArrayDifference, utilArrayUnion, utilArrayUniq } from '../util/array';
@@ -213,8 +213,9 @@ export function coreDifference(base, head) {
 
             if (extent &&
                 (!h || !h.intersects(extent, head)) &&
-                (!b || !b.intersects(extent, base)))
+                (!b || !b.intersects(extent, base))) {
                 continue;
+            }
 
             result[id] = h;
 

@@ -1,7 +1,4 @@
-import {
-    event as d3_event,
-    select as d3_select
-} from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 
 import { prefs } from '../../core/preferences';
 import { t } from '../../core/localizer';
@@ -17,7 +14,7 @@ export function uiSectionValidationRules(context) {
 
     var section = uiSection('issues-rules', context)
         .disclosureContent(renderDisclosureContent)
-        .title(t('issues.rules.title'));
+        .label(() => t.append('issues.rules.title'));
 
     var _ruleKeys = context.validator().getRuleKeys()
         .filter(function(key) { return key !== 'maprules'; })
@@ -45,19 +42,23 @@ export function uiSectionValidationRules(context) {
         ruleLinks
             .append('a')
             .attr('class', 'issue-rules-link')
+            .attr('role', 'button')
             .attr('href', '#')
-            .text(t('issues.enable_all'))
-            .on('click', function() {
-                context.validator().disableRules([]);
+            .call(t.append('issues.disable_all'))
+            .on('click', function(d3_event) {
+                d3_event.preventDefault();
+                context.validator().disableRules(_ruleKeys);
             });
 
         ruleLinks
             .append('a')
             .attr('class', 'issue-rules-link')
+            .attr('role', 'button')
             .attr('href', '#')
-            .text(t('issues.disable_all'))
-            .on('click', function() {
-                context.validator().disableRules(_ruleKeys);
+            .call(t.append('issues.enable_all'))
+            .on('click', function(d3_event) {
+                d3_event.preventDefault();
+                context.validator().disableRules([]);
             });
 
 
@@ -84,7 +85,7 @@ export function uiSectionValidationRules(context) {
         if (name === 'rule') {
             enter
                 .call(uiTooltip()
-                    .title(function(d) { return t('issues.' + d + '.tip'); })
+                    .title(function(d) { return t.append('issues.' + d + '.tip'); })
                     .placement('top')
                 );
         }
@@ -100,12 +101,14 @@ export function uiSectionValidationRules(context) {
 
         label
             .append('span')
-            .html(function(d) {
+            .each(function(d) {
                 var params = {};
                 if (d === 'unsquare_way') {
-                    params.val = '<span class="square-degrees"></span>';
+                    params.val = selection => selection
+                        .append('span')
+                        .classed('square-degrees', true);
                 }
-                return t('issues.' + d + '.title', params);
+                d3_select(this).call(t.append('issues.' + d + '.title', params));
             });
 
         // Update
@@ -122,7 +125,7 @@ export function uiSectionValidationRules(context) {
         // user-configurable square threshold
         var degStr = prefs('validate-square-degrees');
         if (degStr === null) {
-            degStr = '' + DEFAULTSQUARE;
+            degStr = DEFAULTSQUARE.toString();
         }
 
         var span = items.selectAll('.square-degrees');
@@ -133,18 +136,18 @@ export function uiSectionValidationRules(context) {
         input.enter()
             .append('input')
             .attr('type', 'number')
-            .attr('min', '' + MINSQUARE)
-            .attr('max', '' + MAXSQUARE)
+            .attr('min', MINSQUARE.toString())
+            .attr('max', MAXSQUARE.toString())
             .attr('step', '0.5')
             .attr('class', 'square-degrees-input')
             .call(utilNoAuto)
-            .on('click', function () {
+            .on('click', function (d3_event) {
                 d3_event.preventDefault();
                 d3_event.stopPropagation();
                 this.select();
             })
-            .on('keyup', function () {
-                if (d3_event.keyCode === 13) { // enter
+            .on('keyup', function (d3_event) {
+                if (d3_event.keyCode === 13) { // ↩ Return
                     this.blur();
                     this.select();
                 }
@@ -157,7 +160,7 @@ export function uiSectionValidationRules(context) {
     function changeSquare() {
         var input = d3_select(this);
         var degStr = utilGetSetValue(input).trim();
-        var degNum = parseFloat(degStr, 10);
+        var degNum = Number(degStr);
 
         if (!isFinite(degNum)) {
             degNum = DEFAULTSQUARE;
@@ -168,20 +171,20 @@ export function uiSectionValidationRules(context) {
         }
 
         degNum = Math.round(degNum * 10 ) / 10;   // round to 1 decimal
-        degStr = '' + degNum;
+        degStr = degNum.toString();
 
         input
             .property('value', degStr);
 
         prefs('validate-square-degrees', degStr);
-        context.validator().reloadUnsquareIssues();
+        context.validator().revalidateUnsquare();
     }
 
     function isRuleEnabled(d) {
         return context.validator().isRuleEnabled(d);
     }
 
-    function toggleRule(d) {
+    function toggleRule(d3_event, d) {
         context.validator().toggleRule(d);
     }
 

@@ -1,7 +1,6 @@
 import { dispatch as d3_dispatch } from 'd3-dispatch';
 
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -19,6 +18,7 @@ import { utilRebind } from '../util/rebind';
 import { utilKeybinding } from '../util';
 
 export function behaviorDrawWay(context, wayID, mode, startGraph) {
+    const keybinding = utilKeybinding('drawWay');
 
     var dispatch = d3_dispatch('rejectedSelfIntersection');
 
@@ -42,7 +42,7 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
 
     function createDrawNode(loc) {
         // don't make the draw node until we actually need it
-        _drawNode = osmNode({ loc: loc });
+        _drawNode = new osmNode({ loc: loc });
 
         context.pauseChangeDispatch();
         context.replace(function actionAddDrawNode(graph) {
@@ -74,7 +74,7 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
     }
 
 
-    function keydown() {
+    function keydown(d3_event) {
         if (d3_event.keyCode === utilKeybinding.modifierCodes.alt) {
             if (context.surface().classed('nope')) {
                 context.surface()
@@ -87,7 +87,7 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
     }
 
 
-    function keyup() {
+    function keyup(d3_event) {
         if (d3_event.keyCode === utilKeybinding.modifierCodes.alt) {
             if (context.surface().classed('nope-suppressed')) {
                 context.surface()
@@ -109,7 +109,7 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
     // - `mode/drag_node.js`     `doMove()`
     // - `behavior/draw.js`      `click()`
     // - `behavior/draw_way.js`  `move()`
-    function move(datum) {
+    function move(d3_event, datum) {
 
         var loc = context.map().mouseCoordinates();
 
@@ -167,7 +167,7 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
         if (includeDrawNode) {
             if (parentWay.isClosed()) {
                 // don't test the last segment for closed ways - #4655
-                // (still test the first segement)
+                // (still test the first segment)
                 nodes.pop();
             }
         } else { // discount the draw node
@@ -195,23 +195,23 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
 
         var nextMode;
 
-        if (context.graph() === startGraph) { // we've undone back to the beginning
+        if (context.graph() === startGraph) {
+            // We've undone back to the initial state before we started drawing.
+            // Just exit the draw mode without undoing whatever we did before
+            // we entered the draw mode.
             nextMode = modeSelect(context, [wayID]);
         } else {
-            context.history()
-                .on('undone.draw', null);
-            // remove whatever segment was drawn previously
-            context.undo();
+            // The `undo` only removed the temporary edit, so here we have to
+            // manually undo to actually remove the last node we added. We can't
+            // use the `undo` function since the initial "add" graph doesn't have
+            // an annotation and so cannot be undone to.
+            context.pop(1);
 
-            if (context.graph() === startGraph) { // we've undone back to the beginning
-                nextMode = modeSelect(context, [wayID]);
-            } else {
-                // continue drawing
-                nextMode = mode;
-            }
+            // continue drawing
+            nextMode = mode;
         }
 
-        // clear the redo stack by adding and removing an edit
+        // clear the redo stack by adding and removing a blank edit
         context.perform(actionNoop());
         context.pop(1);
 
@@ -239,10 +239,17 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
         _drawNode = undefined;
         _didResolveTempEdit = false;
         _origWay = context.entity(wayID);
-        _headNodeID = typeof _nodeIndex === 'number' ? _origWay.nodes[_nodeIndex] :
-            (_origWay.isClosed() ? _origWay.nodes[_origWay.nodes.length - 2] : _origWay.nodes[_origWay.nodes.length - 1]);
+
+        if (typeof _nodeIndex === 'number') {
+            _headNodeID = _origWay.nodes[_nodeIndex];
+        } else if (_origWay.isClosed()) {
+            _headNodeID = _origWay.nodes[_origWay.nodes.length - 2];
+        } else {
+            _headNodeID = _origWay.nodes[_origWay.nodes.length - 1];
+        }
+
         _wayGeometry = _origWay.geometry(context.graph());
-        _annotation = t((_origWay.isDegenerate() ?
+        _annotation = t((_origWay.nodes.length === (_origWay.isClosed() ? 2 : 1) ?
             'operations.start.annotation.' :
             'operations.continue.annotation.') + _wayGeometry
         );
@@ -406,6 +413,102 @@ export function behaviorDrawWay(context, wayID, mode, startGraph) {
         });
     };
 
+    /**
+     * @param {(typeof osmWay)[]} ways
+     * @returns {"line" | "area" | "generic"}
+     */
+    function getFeatureType(ways) {
+        if (ways.every(way => way.isClosed())) return 'area';
+        if (ways.every(way => !way.isClosed())) return 'line';
+        return 'generic';
+    }
+
+    /** see PR #8671 */
+    function followMode(d3_event) {
+        if (_didResolveTempEdit) return;
+
+        d3_event.preventDefault();
+
+        try {
+
+            // get the last 2 added nodes.
+            // check if they are both part of only oneway (the same one)
+            // check if the ways that they're part of are the same way
+            // find index of the last two nodes, to determine the direction to travel around the existing way
+            // add the next node to the way we are drawing
+
+            // if we're drawing an area, the first node = last node.
+            const isDrawingArea = _origWay.nodes[0] === _origWay.nodes.slice(-1)[0];
+
+            const [secondLastNodeId, lastNodeId] = _origWay.nodes.slice(isDrawingArea ? -3 : -2);
+
+            // Unlike startGraph, the full history graph may contain unsaved vertices to follow.
+            // https://github.com/openstreetmap/iD/issues/8749
+            const historyGraph = context.history().graph();
+            if (!lastNodeId || !secondLastNodeId || !historyGraph.hasEntity(lastNodeId) || !historyGraph.hasEntity(secondLastNodeId)) {
+                context.ui().flash
+                    .duration(4000)
+                    .iconName('#iD-icon-no')
+                    .label(t.append('operations.follow.error.needs_more_initial_nodes'))();
+                return;
+            }
+
+            // If the way has looped over itself, follow some other way.
+            const lastNodesParents = historyGraph.parentWays(historyGraph.entity(lastNodeId)).filter(w => w.id !== wayID);
+            const secondLastNodesParents = historyGraph.parentWays(historyGraph.entity(secondLastNodeId)).filter(w => w.id !== wayID);
+
+            const featureType = getFeatureType(lastNodesParents);
+
+            if (lastNodesParents.length !== 1 || secondLastNodesParents.length === 0) {
+                context.ui().flash
+                    .duration(4000)
+                    .iconName('#iD-icon-no')
+                    .label(t.append(`operations.follow.error.intersection_of_multiple_ways.${featureType}`))();
+                return;
+            }
+
+            // Check if the last node's parent is also the parent of the second last node.
+            // The last node must only have one parent, but the second last node can have
+            // multiple parents.
+            if (!secondLastNodesParents.some(n => n.id === lastNodesParents[0].id)) {
+                context.ui().flash
+                    .duration(4000)
+                    .iconName('#iD-icon-no')
+                    .label(t.append(`operations.follow.error.intersection_of_different_ways.${featureType}`))();
+                return;
+            }
+
+            const way = lastNodesParents[0];
+
+            const indexOfLast = way.nodes.indexOf(lastNodeId);
+            const indexOfSecondLast = way.nodes.indexOf(secondLastNodeId);
+
+            // for a closed way, the first/last node is the same so it appears twice in the array,
+            // but indexOf always finds the first occurrence. This is only an issue when following a way
+            // in descending order
+            const isDescendingPastZero = indexOfLast === way.nodes.length - 2 && indexOfSecondLast === 0;
+
+            let nextNodeIndex = indexOfLast + (indexOfLast > indexOfSecondLast && !isDescendingPastZero ? 1 : -1);
+            // if we're following a closed way and we pass the first/last node, the  next index will be -1
+            if (nextNodeIndex === -1) nextNodeIndex = indexOfSecondLast === 1 ? way.nodes.length - 2 : 1;
+
+            const nextNode = historyGraph.entity(way.nodes[nextNodeIndex]);
+
+            drawWay.addNode(nextNode, {
+                geometry: { type: 'Point', coordinates: nextNode.loc },
+                id: nextNode.id,
+                properties: { target: true, entity: nextNode },
+            });
+        } catch {
+            context.ui().flash
+                .duration(4000)
+                .iconName('#iD-icon-no')
+                .label(t.append('operations.follow.error.unknown'))();
+        }
+    }
+
+    keybinding.on(t('operations.follow.key'), followMode);
+    d3_select(document).call(keybinding);
 
     // Finish the draw operation, removing the temporary edit.
     // If the way has enough nodes to be valid, it's selected.

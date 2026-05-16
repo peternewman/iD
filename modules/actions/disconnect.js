@@ -1,7 +1,7 @@
 import { osmNode } from '../osm/node';
 
 
-// Disconect the ways at the given node.
+// Disconnect the ways at the given node.
 //
 // Optionally, disconnect only the given ways.
 //
@@ -18,6 +18,11 @@ import { osmNode } from '../osm/node';
 export function actionDisconnect(nodeId, newNodeId) {
     var wayIds;
 
+    var disconnectableRelationTypes = {
+        'associatedStreet': true,
+        'enforcement': true,
+        'site': true,
+    };
 
     var action = function(graph) {
         var node = graph.entity(nodeId);
@@ -25,7 +30,7 @@ export function actionDisconnect(nodeId, newNodeId) {
 
         connections.forEach(function(connection) {
             var way = graph.entity(connection.wayID);
-            var newNode = osmNode({id: newNodeId, loc: node.loc, tags: node.tags});
+            var newNode = new osmNode({id: newNodeId, loc: node.loc, tags: node.tags});
 
             graph = graph.replace(newNode);
             if (connection.index === 0 && way.isArea()) {
@@ -80,8 +85,7 @@ export function actionDisconnect(nodeId, newNodeId) {
 
     action.disabled = function(graph) {
         var connections = action.connections(graph);
-        if (connections.length === 0)
-            return 'not_connected';
+        if (connections.length === 0) return 'not_connected';
 
         var parentWays = graph.parentWays(graph.entity(nodeId));
         var seenRelationIds = {};
@@ -89,7 +93,9 @@ export function actionDisconnect(nodeId, newNodeId) {
 
         parentWays.forEach(function(way) {
             var relations = graph.parentRelations(way);
-            relations.forEach(function(relation) {
+            relations
+            .filter(relation => !disconnectableRelationTypes[relation.tags.type])
+            .forEach(function(relation) {
                 if (relation.id in seenRelationIds) {
                     if (wayIds) {
                         if (wayIds.indexOf(way.id) !== -1 ||
@@ -105,8 +111,7 @@ export function actionDisconnect(nodeId, newNodeId) {
             });
         });
 
-        if (sharedRelation)
-            return 'relation';
+        if (sharedRelation) return 'relation';
     };
 
 

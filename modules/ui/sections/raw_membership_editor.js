@@ -1,7 +1,4 @@
-import {
-    event as d3_event,
-    select as d3_select
-} from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 
 import { presetManager } from '../../presets';
 import { t, localizer } from '../../core/localizer';
@@ -9,32 +6,33 @@ import { t, localizer } from '../../core/localizer';
 import { actionAddEntity } from '../../actions/add_entity';
 import { actionAddMember } from '../../actions/add_member';
 import { actionChangeMember } from '../../actions/change_member';
-import { actionDeleteMember } from '../../actions/delete_member';
+import { actionDeleteMembers } from '../../actions/delete_members';
 
 import { modeSelect } from '../../modes/select';
 import { osmEntity, osmRelation } from '../../osm';
+import { getRelationColor, isColorValid } from '../../osm/tags';
 import { services } from '../../services';
 import { svgIcon } from '../../svg/icon';
 import { uiCombobox } from '../combobox';
 import { uiSection } from '../section';
 import { uiTooltip } from '../tooltip';
-import { utilArrayGroupBy, utilDisplayName, utilNoAuto, utilHighlightEntities, utilUniqueDomId } from '../../util';
+import { utilArrayGroupBy, utilArrayIntersection } from '../../util/array';
+import { utilDisplayName, utilNoAuto, utilHighlightEntities, utilUniqueDomId } from '../../util';
+import { prefs } from '../../core';
+import { idMatch } from '../feature_list';
 
 
 export function uiSectionRawMembershipEditor(context) {
 
     var section = uiSection('raw-membership-editor', context)
         .shouldDisplay(function() {
-            return _entityIDs && _entityIDs.length === 1;
+            return _entityIDs && _entityIDs.length;
         })
-        .title(function() {
-            var entity = context.hasEntity(_entityIDs[0]);
-            if (!entity) return '';
-
-            var parents = context.graph().parentRelations(entity);
+        .label(function() {
+            var parents = getSharedParentRelations();
             var gt = parents.length > _maxMemberships ? '>' : '';
             var count = gt + parents.slice(0, _maxMemberships).length;
-            return t('inspector.title_count', { title: t('inspector.relations'), count: count });
+            return t.append('inspector.title_count', { title: t.append('inspector.relations'), count: count });
         })
         .disclosureContent(renderDisclosureContent);
 
@@ -42,18 +40,116 @@ export function uiSectionRawMembershipEditor(context) {
     var nearbyCombo = uiCombobox(context, 'parent-relation')
         .minItems(1)
         .fetcher(fetchNearbyRelations)
-        .itemsMouseEnter(function(d) {
+        .itemsMouseEnter(function(d3_event, d) {
             if (d.relation) utilHighlightEntities([d.relation.id], true, context);
         })
-        .itemsMouseLeave(function(d) {
+        .itemsMouseLeave(function(d3_event, d) {
             if (d.relation) utilHighlightEntities([d.relation.id], false, context);
         });
     var _inChange = false;
     var _entityIDs = [];
     var _showBlank;
     var _maxMemberships = 1000;
+    /** @type {Set<string>} relations that were added after this panel was opened */
+    const recentlyAdded = new Set();
 
-    function selectRelation(d) {
+    function getSharedParentRelations() {
+        var parents = [];
+        for (var i = 0; i < _entityIDs.length; i++) {
+            var entity = context.graph().hasEntity(_entityIDs[i]);
+            if (!entity) continue;
+
+            if (i === 0) {
+                parents = context.graph().parentRelations(entity);
+            } else {
+                parents = utilArrayIntersection(parents, context.graph().parentRelations(entity));
+            }
+            if (!parents.length) break;
+        }
+        return parents;
+    }
+
+    function getMemberships() {
+
+        var memberships = [];
+        var relations = getSharedParentRelations().slice(0, _maxMemberships);
+
+        var isMultiselect = _entityIDs.length > 1;
+
+        var i, relation, membership, index, member, indexedMember;
+        for (i = 0; i < relations.length; i++) {
+            relation = relations[i];
+            membership = {
+                relation: relation,
+                members: [],
+                hash: osmEntity.key(relation)
+            };
+            for (index = 0; index < relation.members.length; index++) {
+                member = relation.members[index];
+                if (_entityIDs.indexOf(member.id) !== -1) {
+                    indexedMember = Object.assign({}, member, { index: index });
+                    membership.members.push(indexedMember);
+                    membership.hash += ',' + index.toString();
+
+                    if (!isMultiselect) {
+                        // For single selections, list one entry per membership per relation.
+                        // For multiselections, list one entry per relation.
+
+                        memberships.push(membership);
+                        membership = {
+                            relation: relation,
+                            members: [],
+                            hash: osmEntity.key(relation)
+                        };
+                    }
+                }
+            }
+            if (membership.members.length) memberships.push(membership);
+        }
+
+        memberships.forEach(function(membership) {
+            membership.domId = utilUniqueDomId('membership-' + membership.relation.id);
+            var roles = [];
+            membership.members.forEach(function(member) {
+                if (roles.indexOf(member.role) === -1) roles.push(member.role);
+            });
+            membership.role = roles.length === 1 ? roles[0] : roles;
+        });
+
+        const existingRelations = memberships
+            .filter(membership => !recentlyAdded.has(membership.relation.id))
+            .map(membership => ({
+                ...membership,
+                // We only sort relations that were not added just now.
+                // Sorting uses the same label as shown in the UI.
+                // If the label is not unique, the relation ID ensures
+                // that the sort order is still stable.
+                _sortKey: [
+                    baseDisplayValue(membership.relation),
+                    membership.relation.id,
+                ].join('-'),
+            }))
+            .sort((a, b) => {
+                return a._sortKey.localeCompare(
+                    b._sortKey,
+                    localizer.localeCodes(),
+                    { numeric: true },
+                );
+            });
+
+
+        const newlyAddedRelations = memberships
+            .filter(membership => recentlyAdded.has(membership.relation.id));
+
+        return [
+            // the sorted relations come first
+            ...existingRelations,
+            // then the ones that were just added from this panel
+            ...newlyAddedRelations,
+        ];
+    }
+
+    function selectRelation(d3_event, d) {
         d3_event.preventDefault();
 
         // remove the hover-highlight styling
@@ -62,7 +158,7 @@ export function uiSectionRawMembershipEditor(context) {
         context.enter(modeSelect(context, [d.relation.id]));
     }
 
-    function zoomToRelation(d) {
+    function zoomToRelation(d3_event, d) {
         d3_event.preventDefault();
 
         var entity = context.entity(d.relation.id);
@@ -73,65 +169,114 @@ export function uiSectionRawMembershipEditor(context) {
     }
 
 
-    function changeRole(d) {
-        if (d === 0) return;    // called on newrow (shoudn't happen)
+    function changeRole(d3_event, d) {
+        if (d === 0) return;    // called on newrow (shouldn't happen)
         if (_inChange) return;  // avoid accidental recursive call #5731
 
-        var oldRole = d.member.role;
         var newRole = context.cleanRelationRole(d3_select(this).property('value'));
 
-        if (oldRole !== newRole) {
+        if (!newRole.trim() && typeof d.role !== 'string') return;
+
+        var membersToUpdate = d.members.filter(function(member) {
+            return member.role !== newRole;
+        });
+
+        if (membersToUpdate.length) {
             _inChange = true;
             context.perform(
-                actionChangeMember(d.relation.id, Object.assign({}, d.member, { role: newRole }), d.index),
-                t('operations.change_role.annotation')
+                function actionChangeMemberRoles(graph) {
+                    membersToUpdate.forEach(function(member) {
+                        var newMember = Object.assign({}, member, { role: newRole });
+                        delete newMember.index;
+                        graph = actionChangeMember(d.relation.id, newMember, member.index)(graph);
+                    });
+                    return graph;
+                },
+                t('operations.change_role.annotation', {
+                    n: membersToUpdate.length
+                })
             );
+            context.validator().validate();
         }
         _inChange = false;
     }
 
 
     function addMembership(d, role) {
-        this.blur();           // avoid keeping focus on the button
         _showBlank = false;
 
-        var member = { id: _entityIDs[0], type: context.entity(_entityIDs[0]).type, role: role };
+        function actionAddMembers(relationId, ids, role) {
+            return function(graph) {
+                for (var i in ids) {
+                    var member = { id: ids[i], type: graph.entity(ids[i]).type, role: role };
+                    graph = actionAddMember(relationId, member)(graph);
+                }
+                return graph;
+            };
+        }
 
         if (d.relation) {
+            recentlyAdded.add(d.relation.id);
             context.perform(
-                actionAddMember(d.relation.id, member),
-                t('operations.add_member.annotation')
+                actionAddMembers(d.relation.id, _entityIDs, role),
+                t('operations.add_member.annotation', {
+                    n: _entityIDs.length
+                })
             );
+            context.validator().validate();
 
         } else {
-            var relation = osmRelation();
+            var relation = new osmRelation();
             context.perform(
                 actionAddEntity(relation),
-                actionAddMember(relation.id, member),
+                actionAddMembers(relation.id, _entityIDs, role),
                 t('operations.add.annotation.relation')
             );
-
+            // changing the mode also runs `validate`
             context.enter(modeSelect(context, [relation.id]).newFeature(true));
         }
     }
 
 
-    function deleteMembership(d) {
+    function downloadMembers(d3_event, d) {
+        d3_event.preventDefault();
+        const button = d3_select(this);
+
+        // display the loading indicator
+        button.classed('loading', true);
+        context.loadEntity(d.relation.id, function() {
+            section.reRender();
+        });
+    }
+
+
+    function deleteMembership(d3_event, d) {
         this.blur();           // avoid keeping focus on the button
-        if (d === 0) return;   // called on newrow (shoudn't happen)
+        if (d === 0) return;   // called on newrow (shouldn't happen)
 
         // remove the hover-highlight styling
         utilHighlightEntities([d.relation.id], false, context);
 
+        var indexes = d.members.map(function(member) {
+            return member.index;
+        });
+
         context.perform(
-            actionDeleteMember(d.relation.id, d.index),
-            t('operations.delete_member.annotation')
+            actionDeleteMembers(d.relation.id, indexes),
+            t('operations.delete_member.annotation', {
+                n: _entityIDs.length
+            })
         );
+        context.validator().validate();
     }
 
 
     function fetchNearbyRelations(q, callback) {
-        var newRelation = { relation: null, value: t('inspector.new_relation') };
+        var newRelation = {
+            relation: null,
+            value: t('inspector.new_relation'),
+            display: t.append('inspector.new_relation')
+        };
 
         var entityID = _entityIDs[0];
 
@@ -144,26 +289,43 @@ export function uiSectionRawMembershipEditor(context) {
             var presetName = (matched && matched.name()) || t('inspector.relation');
             var entityName = utilDisplayName(entity) || '';
 
-            return presetName + ' ' + entityName;
+            return selection => {
+                selection
+                    .append('b')
+                    .text(presetName + ' ');
+                selection
+                    .append('span')
+                    .classed('has-colour', entity.tags.colour && isColorValid(entity.tags.colour))
+                    .style('border-color', entity.tags.colour)
+                    .text(entityName);
+            };
         }
 
-        var explicitRelation = q && context.hasEntity(q.toLowerCase());
+
+        // A location search takes priority over an ID search
+        const idMatchResult = q && idMatch(q);
+        var explicitRelation = context.hasEntity(`r${idMatchResult?.id || q}`);
         if (explicitRelation && explicitRelation.type === 'relation' && explicitRelation.id !== entityID) {
             // loaded relation is specified explicitly, only show that
 
             result.push({
                 relation: explicitRelation,
-                value: baseDisplayLabel(explicitRelation) + ' ' + explicitRelation.id
+                value: baseDisplayValue(explicitRelation) + ' ' + explicitRelation.id,
+                display: baseDisplayLabel(explicitRelation)
             });
         } else {
 
             context.history().intersects(context.map().extent()).forEach(function(entity) {
                 if (entity.type !== 'relation' || entity.id === entityID) return;
 
-                var value = baseDisplayLabel(entity);
+                var value = baseDisplayValue(entity);
                 if (q && (value + ' ' + entity.id).toLowerCase().indexOf(q.toLowerCase()) === -1) return;
 
-                result.push({ relation: entity, value: value });
+                result.push({
+                    relation: entity,
+                    value,
+                    display: baseDisplayLabel(entity)
+                });
             });
 
             result.sort(function(a, b) {
@@ -171,14 +333,10 @@ export function uiSectionRawMembershipEditor(context) {
             });
 
             // Dedupe identical names by appending relation id - see #2891
-            var dupeGroups = Object.values(utilArrayGroupBy(result, 'value'))
-                .filter(function(v) { return v.length > 1; });
-
-            dupeGroups.forEach(function(group) {
-                group.forEach(function(obj) {
-                    obj.value += ' ' + obj.relation.id;
-                });
-            });
+            Object.values(utilArrayGroupBy(result, 'value'))
+                .filter(v => v.length > 1)
+                .flat()
+                .forEach(obj => obj.value += ' ' + obj.relation.id);
         }
 
         result.forEach(function(obj) {
@@ -189,27 +347,18 @@ export function uiSectionRawMembershipEditor(context) {
         callback(result);
     }
 
+    function baseDisplayValue(entity) {
+        const graph = context.graph();
+        var matched = presetManager.match(entity, graph);
+        var presetName = (matched && matched.name()) || t('inspector.relation');
+        var entityName = utilDisplayName(entity) || '';
+
+        return presetName + ' ' + entityName;
+    }
+
     function renderDisclosureContent(selection) {
 
-        var entityID = _entityIDs[0];
-
-        var entity = context.entity(entityID);
-        var parents = context.graph().parentRelations(entity);
-
-        var memberships = [];
-
-        parents.slice(0, _maxMemberships).forEach(function(relation) {
-            relation.members.forEach(function(member, index) {
-                if (member.id === entity.id) {
-                    memberships.push({
-                        relation: relation,
-                        member: member,
-                        index: index,
-                        domId: utilUniqueDomId(entityID + '-membership-' + relation.id + '-' + index)
-                    });
-                }
-            });
-        });
+        var memberships = getMemberships();
 
         var list = selection.selectAll('.member-list')
             .data([0]);
@@ -222,7 +371,7 @@ export function uiSectionRawMembershipEditor(context) {
 
         var items = list.selectAll('li.member-row-normal')
             .data(memberships, function(d) {
-                return osmEntity.key(d.relation) + ',' + d.index;
+                return d.hash;
             });
 
         items.exit()
@@ -235,10 +384,10 @@ export function uiSectionRawMembershipEditor(context) {
             .attr('class', 'member-row member-row-normal form-field');
 
         // highlight the relation in the map while hovering on the list item
-        itemsEnter.on('mouseover', function(d) {
+        itemsEnter.on('mouseover', function(d3_event, d) {
                 utilHighlightEntities([d.relation.id], true, context);
             })
-            .on('mouseout', function(d) {
+            .on('mouseout', function(d3_event, d) {
                 utilHighlightEntities([d.relation.id], false, context);
             });
 
@@ -259,20 +408,64 @@ export function uiSectionRawMembershipEditor(context) {
         labelLink
             .append('span')
             .attr('class', 'member-entity-type')
-            .text(function(d) {
-                var matched = presetManager.match(d.relation, context.graph());
+            .text(d => {
+                let matched = presetManager.match(d.relation, context.graph());
+                while (matched?.suggestion) {
+                    // if is NSI preset: look for a parent preset
+                    matched = matched.getParentPreset();
+                }
                 return (matched && matched.name()) || t('inspector.relation');
             });
+
+        const showThirdPartyIcons = prefs('preferences.privacy.thirdpartyicons') || 'true';
+        labelLink.each(function(d) {
+            if (!showThirdPartyIcons) return;
+            const matched = presetManager.match(d.relation, context.graph());
+            if (matched.suggestion) {
+                // if matching an NSI preset: append icon
+                const img = d3_select(this)
+                    .append('img');
+                img
+                    .classed('member-entity-icon', true)
+                    .on('load', () => img.classed('hide', false))
+                    .on('error', () => img.classed('hide', true))
+                    .attr('src', matched.imageURL);
+            }
+        });
+
+        labelLink.each(function(d) {
+            const relColors = getRelationColor(d.relation.tags, '#555');
+            const hasRef = d.relation.tags.ref;
+            if (relColors.isValid || hasRef) {
+                const refs = (d.relation.tags.ref || '').split(';');
+                for (const ref of refs) {
+                    d3_select(this)
+                        .append('span')
+                        .classed('member-entity-ref-color', true)
+                        .style('border-color', relColors.color)
+                        .style('background-color', relColors.color)
+                        .style('color', relColors.textColor)
+                        .text(ref);
+                }
+            }
+        });
 
         labelLink
             .append('span')
             .attr('class', 'member-entity-name')
-            .text(function(d) { return utilDisplayName(d.relation); });
+            .text(d => utilDisplayName(d.relation, { hideRef: true }));
 
         labelEnter
             .append('button')
-            .attr('tabindex', -1)
+            .attr('class', 'members-download')
+            .attr('title', t('icons.download'))
+            .call(svgIcon('#iD-icon-load'))
+            .on('click', downloadMembers);
+
+        labelEnter
+            .append('button')
             .attr('class', 'remove member-delete')
+            .attr('title', t('icons.remove'))
             .call(svgIcon('#iD-operation-delete'))
             .on('click', deleteMembership);
 
@@ -282,6 +475,30 @@ export function uiSectionRawMembershipEditor(context) {
             .attr('title', t('icons.zoom_to'))
             .call(svgIcon('#iD-icon-framed-dot', 'monochrome'))
             .on('click', zoomToRelation);
+
+        items = items.merge(itemsEnter);
+        items.selectAll('button.members-download')
+            .classed('hide', d => {
+                const graph = context.graph();
+                return d.relation.members.every(m => graph.hasEntity(m.id));
+            });
+
+        const dupeLabels = new WeakSet(Object.values(
+            utilArrayGroupBy(items.selectAll('.label-text').nodes(), 'textContent'))
+            .filter(v => v.length > 1)
+            .flat());
+
+        items.select('.label-text').each(function() {
+            const label = d3_select(this);
+            const entityName = label.select('.member-entity-name');
+            if (dupeLabels.has(this)) {
+                // Dedupe identical names in hover text by appending relation id - see #2891, #10184
+                label.attr('title', d => `${entityName.text()} ${d.relation.id}`);
+            } else {
+                // set full label also as hover text: useful if a (long) label is cut off with an … ellipsis
+                label.attr('title', () => entityName.text());
+            }
+        });
 
         var wrapEnter = itemsEnter
             .append('div')
@@ -294,16 +511,25 @@ export function uiSectionRawMembershipEditor(context) {
                 return d.domId;
             })
             .property('type', 'text')
-            .attr('placeholder', t('inspector.role'))
+            .property('value', function(d) {
+                return typeof d.role === 'string' ? d.role : '';
+            })
+            .attr('title', function(d) {
+                return Array.isArray(d.role) ? d.role.filter(Boolean).join('\n') : d.role;
+            })
+            .attr('placeholder', function(d) {
+                return Array.isArray(d.role) ? t('inspector.multiple_roles') : t('inspector.role');
+            })
+            .classed('mixed', function(d) {
+                return Array.isArray(d.role);
+            })
             .call(utilNoAuto)
-            .property('value', function(d) { return d.member.role; })
             .on('blur', changeRole)
             .on('change', changeRole);
 
         if (taginfo) {
             wrapEnter.each(bindTypeahead);
         }
-
 
         var newMembership = list.selectAll('.member-row-new')
             .data(_showBlank ? [0] : []);
@@ -330,8 +556,8 @@ export function uiSectionRawMembershipEditor(context) {
 
         newLabelEnter
             .append('button')
-            .attr('tabindex', -1)
             .attr('class', 'remove member-delete')
+            .attr('title', t('icons.remove'))
             .call(svgIcon('#iD-operation-delete'))
             .on('click', function() {
                 list.selectAll('.member-row-new')
@@ -356,7 +582,10 @@ export function uiSectionRawMembershipEditor(context) {
         newMembership.selectAll('.member-entity-input')
             .on('blur', cancelEntity)   // if it wasn't accepted normally, cancel it
             .call(nearbyCombo
-                .on('accept', acceptEntity)
+                .on('accept', function(d) {
+                    this.blur(); // always blurs the triggering element
+                    acceptEntity.call(this, d);
+                })
                 .on('cancel', cancelEntity)
             );
 
@@ -372,12 +601,15 @@ export function uiSectionRawMembershipEditor(context) {
 
         var addRelationButton = addRowEnter
             .append('button')
-            .attr('class', 'add-relation');
+            .attr('class', 'add-relation')
+            .attr('aria-label', t('inspector.add_to_relation'));
 
         addRelationButton
             .call(svgIcon('#iD-icon-plus', 'light'));
         addRelationButton
-            .call(uiTooltip().title(t('inspector.add_to_relation')).placement(localizer.textDirection() === 'ltr' ? 'right' : 'left'));
+            .call(uiTooltip()
+                .title(() => t.append('inspector.add_to_relation'))
+                .placement(localizer.textDirection() === 'ltr' ? 'right' : 'left'));
 
         addRowEnter
             .append('div')
@@ -446,7 +678,7 @@ export function uiSectionRawMembershipEditor(context) {
                     taginfo.roles({
                         debounce: true,
                         rtype: rtype || '',
-                        geometry: context.graph().geometry(entityID),
+                        geometry: context.graph().geometry(_entityIDs[0]),
                         query: role
                     }, function(err, data) {
                         if (!err) callback(sort(role, data));
@@ -470,8 +702,12 @@ export function uiSectionRawMembershipEditor(context) {
 
     section.entityIDs = function(val) {
         if (!arguments.length) return _entityIDs;
+        const didChange = _entityIDs.join(',') !== val.join(',');
         _entityIDs = val;
         _showBlank = false;
+        if (didChange) {
+            recentlyAdded.clear(); // reset when the selected feature changes
+        }
         return section;
     };
 

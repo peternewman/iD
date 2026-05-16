@@ -1,17 +1,15 @@
-
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
-import _debounce from 'lodash-es/debounce';
-import { uiToolOldDrawModes, uiToolNotes, uiToolSave, uiToolSidebarToggle, uiToolUndoRedo } from './tools';
+import { debounce } from 'es-toolkit/compat';
+import { uiToolDrawModes, uiToolNotes, uiToolSave, uiToolSidebarToggle, uiToolUndoRedo } from './tools';
 
 
 export function uiTopToolbar(context) {
 
     var sidebarToggle = uiToolSidebarToggle(context),
-        modes = uiToolOldDrawModes(context),
+        modes = uiToolDrawModes(context),
         notes = uiToolNotes(context),
         undoRedo = uiToolUndoRedo(context),
         save = uiToolSave(context);
@@ -23,7 +21,7 @@ export function uiTopToolbar(context) {
 
     function topToolbar(bar) {
 
-        bar.on('wheel.topToolbar', function() {
+        bar.on('wheel.topToolbar', function(d3_event) {
             if (!d3_event.deltaX) {
                 // translate vertical scrolling into horizontal scrolling in case
                 // the user doesn't have an input device that can scroll horizontally
@@ -31,7 +29,7 @@ export function uiTopToolbar(context) {
             }
         });
 
-        var debouncedUpdate = _debounce(update, 500, { leading: true, trailing: true });
+        var debouncedUpdate = debounce(update, 500, { leading: true, trailing: true });
         context.layers()
             .on('change.topToolbar', debouncedUpdate);
 
@@ -70,7 +68,7 @@ export function uiTopToolbar(context) {
                 .enter()
                 .append('div')
                 .attr('class', function(d) {
-                    var classes = 'toolbar-item ' + (d.id || d).replace('_', '-');
+                    var classes = 'toolbar-item ' + (d.id || d).replaceAll('_', '-');
                     if (d.klass) classes += ' ' + d.klass;
                     return classes;
                 });
@@ -87,9 +85,7 @@ export function uiTopToolbar(context) {
             actionableItems
                 .append('div')
                 .attr('class', 'item-label')
-                .text(function(d) {
-                    return d.label;
-                });
+                .each(function(d) { d.label(d3_select(this)); });
         }
 
     }

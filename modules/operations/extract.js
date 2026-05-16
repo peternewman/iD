@@ -17,26 +17,28 @@ export function operationExtract(context, selectedIDs) {
     var _actions = selectedIDs.map(function(entityID) {
         var graph = context.graph();
         var entity = graph.hasEntity(entityID);
-        if (!entity || !entity.hasInterestingTags()) return;
+        if (!entity || !entity.hasInterestingTags()) return null;
 
-        if (entity.type === 'node' && graph.parentWays(entity).length === 0) return;
+        if (entity.type === 'node' && graph.parentWays(entity).length === 0) return null;
 
         if (entity.type !== 'node') {
             var preset = presetManager.match(entity, graph);
             // only allow extraction from ways/relations if the preset supports points
-            if (preset.geometry.indexOf('point') === -1) return;
+            if (preset.geometry.indexOf('point') === -1) return null;
         }
 
         _extent = _extent ? _extent.extend(entity.extent(graph)) : entity.extent(graph);
 
-        return actionExtract(entityID);
+        return actionExtract(entityID, context.projection);
     }).filter(Boolean);
 
+    /** @param {KeyboardEvent | undefined} d3_event */
+    var operation = function (d3_event) {
+        const shiftKeyPressed = d3_event?.shiftKey || false;
 
-    var operation = function () {
         var combinedAction = function(graph) {
             _actions.forEach(function(action) {
-                graph = action(graph);
+                graph = action(graph, shiftKeyPressed);
             });
             return graph;
         };
@@ -71,21 +73,21 @@ export function operationExtract(context, selectedIDs) {
     operation.tooltip = function () {
         var disableReason = operation.disabled();
         if (disableReason) {
-            return t('operations.extract.' + disableReason + '.' + _amount);
+            return t.append('operations.extract.' + disableReason + '.' + _amount);
         } else {
-            return t('operations.extract.description.' + _geometryID + '.' + _amount);
+            return t.append('operations.extract.description.' + _geometryID + '.' + _amount);
         }
     };
 
 
     operation.annotation = function () {
-        return t('operations.extract.annotation.' + _amount, { n: selectedIDs.length });
+        return t('operations.extract.annotation', { n: selectedIDs.length });
     };
 
 
     operation.id = 'extract';
     operation.keys = [t('operations.extract.key')];
-    operation.title = t('operations.extract.title');
+    operation.title = t.append('operations.extract.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
 

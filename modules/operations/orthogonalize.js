@@ -2,6 +2,7 @@ import { t } from '../core/localizer';
 import { actionOrthogonalize } from '../actions/orthogonalize';
 import { behaviorOperation } from '../behavior/operation';
 import { utilGetAllNodes } from '../util';
+import { svgPath } from '../svg';
 
 
 export function operationOrthogonalize(context, selectedIDs) {
@@ -116,22 +117,41 @@ export function operationOrthogonalize(context, selectedIDs) {
     };
 
 
+    operation.getAuxiliaryGeometry = function() {
+        const graph = context.graph();
+        return _actions.map((action, idx) => {
+            if (!action.disabled(graph)) {
+                const previewGraph = action(graph, t);
+                const way = previewGraph.hasEntity(selectedIDs[idx]);
+                const getPath = svgPath(context.projection, previewGraph, false);
+                return {
+                    id: way.id,
+                    path: getPath(way),
+                    klass: 'preview'
+                };
+            } else {
+                return false;
+            }
+        }).filter(Boolean);
+    };
+
+
     operation.tooltip = function() {
         var disable = operation.disabled();
         return disable ?
-            t('operations.orthogonalize.' + disable + '.' + _amount) :
-            t('operations.orthogonalize.description.' + _type + '.' + _amount);
+            t.append('operations.orthogonalize.' + disable + '.' + _amount) :
+            t.append('operations.orthogonalize.description.' + _type + '.' + _amount);
     };
 
 
     operation.annotation = function() {
-        return t('operations.orthogonalize.annotation.' + _type + '.' + _amount);
+        return t('operations.orthogonalize.annotation.' + _type, { n: _actions.length });
     };
 
 
     operation.id = 'orthogonalize';
     operation.keys = [t('operations.orthogonalize.key')];
-    operation.title = t('operations.orthogonalize.title');
+    operation.title = t.append('operations.orthogonalize.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

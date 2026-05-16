@@ -10,34 +10,49 @@ import { utilArrayUniq } from '../util';
 */
 export function svgDefs(context) {
 
+    var _defsSelection = d3_select(null);
+
+    var _spritesheetIds = [
+        'iD-sprite', 'maki-sprite', 'temaki-sprite', 'fa-sprite', 'roentgen-sprite', 'community-sprite'
+    ];
+
     function drawDefs(selection) {
-        var defs = selection.append('defs');
+        _defsSelection = selection.append('defs');
 
         // add markers
-        defs
-            .append('marker')
-            .attr('id', 'ideditor-oneway-marker')
-            .attr('viewBox', '0 0 10 5')
-            .attr('refX', 2.5)
-            .attr('refY', 2.5)
-            .attr('markerWidth', 2)
-            .attr('markerHeight', 2)
-            .attr('markerUnits', 'strokeWidth')
-            .attr('orient', 'auto')
-            .append('path')
-            .attr('class', 'oneway-marker-path')
-            .attr('d', 'M 5,3 L 0,3 L 0,2 L 5,2 L 5,0 L 10,2.5 L 5,5 z')
-            .attr('stroke', 'none')
-            .attr('fill', '#000')
-            .attr('opacity', '0.75');
 
         // SVG markers have to be given a colour where they're defined
         // (they can't inherit it from the line they're attached to),
         // so we need to manually define markers for each color of tag
         // (also, it's slightly nicer if we can control the
         // positioning for different tags)
-        function addSidedMarker(name, color, offset) {
-            defs
+
+        /** @param {string} name @param {string} colour */
+        function addOnewayMarker(name, colour) {
+            _defsSelection
+                .append('marker')
+                .attr('id', `ideditor-oneway-marker-${name}`)
+                .attr('viewBox', '0 0 10 5')
+                .attr('refX', 4)
+                .attr('refY', 2.5)
+                .attr('markerWidth', 2)
+                .attr('markerHeight', 2)
+                .attr('markerUnits', 'strokeWidth')
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('class', 'oneway-marker-path')
+                .attr('d', 'M 6,3 L 0,3 L 0,2 L 6,2 L 5,0 L 10,2.5 L 5,5 z')
+                .attr('stroke', 'none')
+                .attr('fill', colour)
+                .attr('opacity', '1');
+        }
+        addOnewayMarker('black', '#333'); // default
+        addOnewayMarker('white', '#fff'); // for dark lines (bridges under construction, railways, etc.)
+        addOnewayMarker('gray', '#eee'); // for railway lines
+
+
+        function addSidedMarker(name, color, offset, style) {
+            _defsSelection
                 .append('marker')
                 .attr('id', 'ideditor-sided-marker-' + name)
                 .attr('viewBox', '0 0 2 2')
@@ -49,7 +64,9 @@ export function svgDefs(context) {
                 .attr('orient', 'auto')
                 .append('path')
                 .attr('class', 'sided-marker-path sided-marker-' + name + '-path')
-                .attr('d', 'M 0,0 L 1,1 L 2,0 z')
+                .attr('d', style === 'circle'
+                    ? 'M 0,0.5 a 0.5,0.5 0 1,0 1,0 a 0.5,0.5 0 1,0 -1,0'
+                    : 'M 0,0 L 1,1 L 2,0 z')
                 .attr('stroke', 'none')
                 .attr('fill', color);
         }
@@ -62,9 +79,12 @@ export function svgDefs(context) {
         // barriers have a dashed line, and separating the triangle
         // from the line visually suits that
         addSidedMarker('barrier', '#ddd', 1);
+        // dedicated style for guard rails (#9594):
+        // marker on opposite side, circles instead of triangles
+        addSidedMarker('guard_rail', '#ddd', -1.5, 'circle');
         addSidedMarker('man_made', '#fff', 0);
 
-        defs
+        _defsSelection
             .append('marker')
             .attr('id', 'ideditor-viewfield-marker')
             .attr('viewBox', '0 0 16 16')
@@ -83,7 +103,7 @@ export function svgDefs(context) {
             .attr('stroke-width', '0.5px')
             .attr('stroke-opacity', '0.75');
 
-        defs
+        _defsSelection
             .append('marker')
             .attr('id', 'ideditor-viewfield-marker-wireframe')
             .attr('viewBox', '0 0 16 16')
@@ -101,8 +121,46 @@ export function svgDefs(context) {
             .attr('stroke-width', '0.5px')
             .attr('stroke-opacity', '0.75');
 
+        _defsSelection
+            .append('marker')
+            .attr('id', 'ideditor-viewfield-marker-side')
+            .attr('viewBox', '0 0 16 16')
+            .attr('refX', 8)
+            .attr('refY', 16)
+            .attr('markerWidth', 4)
+            .attr('markerHeight', 4)
+            .attr('markerUnits', 'strokeWidth')
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('class', 'viewfield-marker-path')
+            .attr('d', 'M 3 14 C 8 13 8 13 13 14 L 8 5 Z')
+            .attr('fill', '#333')
+            .attr('fill-opacity', '0.75')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', '0.5px')
+            .attr('stroke-opacity', '0.75');
+
+        _defsSelection
+            .append('marker')
+            .attr('id', 'ideditor-viewfield-marker-side-wireframe')
+            .attr('viewBox', '0 0 16 16')
+            .attr('refX', 8)
+            .attr('refY', 16)
+            .attr('markerWidth', 4)
+            .attr('markerHeight', 4)
+            .attr('markerUnits', 'strokeWidth')
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('class', 'viewfield-marker-path')
+            .attr('d', 'M 3 14 C 8 13 8 13 13 14 L 8 5 Z')
+            .attr('fill', 'none')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', '0.5px')
+            .attr('stroke-opacity', '0.75');
+
+
         // add patterns
-        var patterns = defs.selectAll('pattern')
+        var patterns = _defsSelection.selectAll('pattern')
             .data([
                 // pattern name, pattern image name
                 ['beach', 'dots'],
@@ -161,7 +219,7 @@ export function svgDefs(context) {
             });
 
         // add clip paths
-        defs.selectAll('clipPath')
+        _defsSelection.selectAll('clipPath')
             .data([12, 18, 20, 32, 45])
             .enter()
             .append('clipPath')
@@ -172,21 +230,41 @@ export function svgDefs(context) {
             .attr('width', function (d) { return d; })
             .attr('height', function (d) { return d; });
 
+        // add svg filters
+        const filters = _defsSelection.selectAll('filter')
+            .data(['alpha-slope5'])
+            .enter()
+            .append('filter')
+            .attr('id', d => d);
+        // Alters the alpha channel such that everything but
+        // (almost) transparent pixels are rendered fully opaque:
+        // This is used in a workaround for how chrome is rendering
+        // the edges of `img` elements when the page zoom is not a
+        // "round value": the semi-transparent pixels of neighboring
+        // tiles cannot "add up" to a fully opaque background layer.
+        // See https://github.com/openstreetmap/iD/issues/10747
+        // and https://github.com/openstreetmap/iD/pull/10594
+        const alphaSlope5 = filters.filter('#alpha-slope5')
+            .append('feComponentTransfer');
+        alphaSlope5.append('feFuncR').attr('type', 'identity');
+        alphaSlope5.append('feFuncG').attr('type', 'identity');
+        alphaSlope5.append('feFuncB').attr('type', 'identity');
+        alphaSlope5.append('feFuncA')
+            .attr('type', 'linear')
+            .attr('slope', 5);
+
         // add symbol spritesheets
-        defs
-            .call(drawDefs.addSprites, [
-                'iD-sprite', 'maki-sprite', 'temaki-sprite', 'fa-sprite', 'tnp-sprite', 'community-sprite'
-            ], true);
+        addSprites(_spritesheetIds, true);
     }
 
+    function addSprites(ids, overrideColors) {
+        _spritesheetIds = utilArrayUniq(_spritesheetIds.concat(ids));
 
-    drawDefs.addSprites = function(selection, ids, overrideColors) {
-        var spritesheets = selection.selectAll('.spritesheet');
-        var currData = spritesheets.data();
-        var data = utilArrayUniq(currData.concat(ids));
+        var spritesheets = _defsSelection
+            .selectAll('.spritesheet')
+            .data(_spritesheetIds);
 
         spritesheets
-            .data(data)
             .enter()
             .append('g')
             .attr('class', function(d) { return 'spritesheet spritesheet-' + d; })
@@ -208,8 +286,13 @@ export function svgDefs(context) {
                         /* ignore */
                     });
             });
-    };
 
+        spritesheets
+            .exit()
+            .remove();
+    }
+
+    drawDefs.addSprites = addSprites;
 
     return drawDefs;
 }

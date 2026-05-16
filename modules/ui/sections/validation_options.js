@@ -1,6 +1,4 @@
-import {
-    event as d3_event
-} from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 
 import { prefs } from '../../core/preferences';
 import { t } from '../../core/localizer';
@@ -36,7 +34,9 @@ export function uiSectionValidationOptions(context) {
         optionsEnter
             .append('div')
             .attr('class', 'issues-option-title')
-            .text(function(d) { return t('issues.options.' + d.key + '.title'); });
+            .each(function(d) {
+                d3_select(this).call(t.append('issues.options.' + d.key + '.title'));
+            });
 
         var valuesEnter = optionsEnter.selectAll('label')
             .data(function(d) {
@@ -51,11 +51,13 @@ export function uiSectionValidationOptions(context) {
             .attr('name', function(d) { return 'issues-option-' + d.key; })
             .attr('value', function(d) { return d.value; })
             .property('checked', function(d) { return getOptions()[d.key] === d.value; })
-            .on('change', function(d) { updateOptionValue(d.key, d.value); });
+            .on('change', function(d3_event, d) { updateOptionValue(d3_event, d.key, d.value); });
 
         valuesEnter
             .append('span')
-            .text(function(d) { return t('issues.options.' + d.key + '.' + d.value); });
+            .each(function(d) {
+                d3_select(this).call(t.append('issues.options.' + d.key + '.' + d.value));
+            });
     }
 
     function getOptions() {
@@ -65,7 +67,7 @@ export function uiSectionValidationOptions(context) {
         };
     }
 
-    function updateOptionValue(d, val) {
+    function updateOptionValue(d3_event, d, val) {
         if (!val && d3_event && d3_event.target) {
             val = d3_event.target.value;
         }

@@ -3,6 +3,7 @@ import { fileFetcher } from '../core/file_fetcher';
 import { t } from '../core/localizer';
 import { uiIntro } from './intro';
 import { uiModal } from './modal';
+import { uiSectionPrivacy } from './sections/privacy';
 
 
 export function uiSplash(context) {
@@ -16,7 +17,7 @@ export function uiSplash(context) {
     let updateMessage = '';
     const sawPrivacyVersion = prefs('sawPrivacyVersion');
     let showSplash = !prefs('sawSplash');
-    if (sawPrivacyVersion !== context.privacyVersion) {
+    if (sawPrivacyVersion && sawPrivacyVersion !== context.privacyVersion) {
       updateMessage = t('splash.privacy_update');
       showSplash = true;
     }
@@ -42,7 +43,7 @@ export function uiSplash(context) {
       .append('div')
       .attr('class','modal-section')
       .append('h3')
-      .text(t('splash.welcome'));
+      .call(t.append('splash.welcome'));
 
     let modalSection = introModal
       .append('div')
@@ -50,19 +51,34 @@ export function uiSplash(context) {
 
     modalSection
       .append('p')
-      .html(t('splash.text', {
+      .call(t.addOrUpdate('splash.text', {
         version: context.version,
-        website: '<a target="_blank" href="http://ideditor.blog/">ideditor.blog</a>',
-        github: '<a target="_blank" href="https://github.com/openstreetmap/iD">github.com</a>'
+        website: selection => selection
+          .append('a')
+          .attr('target', '_blank')
+          .attr('href', 'https://github.com/openstreetmap/iD/blob/develop/CHANGELOG.md#whats-new')
+          .call(t.addOrUpdate('splash.changelog')),
+        github: selection => selection
+          .append('a')
+          .attr('target', '_blank')
+          .attr('href', 'https://github.com/openstreetmap/iD/issues')
+          .text('github.com')
       }));
 
     modalSection
       .append('p')
-      .html(t('splash.privacy', {
+      .call(t.addOrUpdate('splash.privacy', {
         updateMessage: updateMessage,
-        privacyLink: '<a target="_blank" href="https://github.com/openstreetmap/iD/blob/release/PRIVACY.md">' +
-          t('splash.privacy_policy') + '</a>'
+        privacyLink: selection => selection
+          .append('a')
+          .attr('target', '_blank')
+          .attr('href', 'https://github.com/openstreetmap/iD/blob/release/PRIVACY.md')
+          .call(t.addOrUpdate('splash.privacy_policy'))
       }));
+
+    uiSectionPrivacy(context)
+      .label(() => t.append('splash.privacy_settings'))
+      .render(modalSection);
 
     let buttonWrap = introModal
       .append('div')
@@ -84,7 +100,7 @@ export function uiSplash(context) {
 
     walkthrough
       .append('div')
-      .text(t('splash.walkthrough'));
+      .call(t.append('splash.walkthrough'));
 
     let startEditing = buttonWrap
       .append('button')
@@ -99,7 +115,7 @@ export function uiSplash(context) {
 
     startEditing
       .append('div')
-      .text(t('splash.start'));
+      .call(t.append('splash.start'));
 
     modalSelection.select('button.close')
       .attr('class','hide');

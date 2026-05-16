@@ -1,5 +1,6 @@
 export { osmChangeset } from './changeset';
 export { osmEntity } from './entity';
+export * from './id_manager';
 export { osmNode } from './node';
 export { osmNote } from './note';
 export { osmRelation } from './relation';
@@ -17,9 +18,6 @@ export {
 } from './lanes';
 
 export {
-    osmOldMultipolygonOuterMemberOfRelation,
-    osmIsOldMultipolygonOuterMember,
-    osmOldMultipolygonOuterMember,
     osmJoinWays
 } from './multipolygon';
 
@@ -32,10 +30,12 @@ export {
     osmVertexTags,
     osmSetVertexTags,
     osmNodeGeometriesForTags,
-    osmOneWayTags,
     osmPavedTags,
     osmIsInterestingTag,
+    osmLifecyclePrefixes,
+    osmRemoveLifecyclePrefix,
     osmRoutableHighwayTagValues,
     osmFlowingWaterwayTagValues,
-    osmRailwayTrackTagValues
+    osmRailwayTrackTagValues,
+    osmWayOnlyTags
 } from './tags';

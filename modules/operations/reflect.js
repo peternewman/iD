@@ -2,6 +2,7 @@ import { t } from '../core/localizer';
 import { actionReflect } from '../actions/reflect';
 import { behaviorOperation } from '../behavior/operation';
 import { utilGetAllNodes, utilTotalExtent } from '../util/util';
+import { svgPath } from '../svg';
 
 
 export function operationReflectShort(context, selectedIDs) {
@@ -22,11 +23,11 @@ export function operationReflect(context, selectedIDs, axis) {
     var extent = utilTotalExtent(selectedIDs, context.graph());
 
 
-    var operation = function() {
-        var action = actionReflect(selectedIDs, context.projection)
-            .useLongAxis(Boolean(axis === 'long'));
+    var _action = actionReflect(selectedIDs, context.projection)
+        .useLongAxis(Boolean(axis === 'long'));
 
-        context.perform(action, operation.annotation());
+    var operation = function() {
+        context.perform(_action, operation.annotation());
 
         window.setTimeout(function() {
             context.validator().validate();
@@ -74,22 +75,42 @@ export function operationReflect(context, selectedIDs, axis) {
     };
 
 
+    operation.getAuxiliaryGeometry = function() {
+        const graph = context.graph();
+        const [p, q] = _action.getReflectAxis(graph);
+        const previewGraph = _action(graph);
+        const getPath = svgPath(context.projection, previewGraph, false);
+        return [{
+            id: 'axis',
+            path: `M ${p[0]} ${p[1]} L ${q[0]} ${q[1]}`,
+            klass: 'reflect-axis'
+        }, ...selectedIDs.map(entityId => {
+            const entity = previewGraph.hasEntity(entityId);
+            return {
+                id: entity.id,
+                path: getPath(entity),
+                klass: 'preview'
+            };
+        })];
+    };
+
+
     operation.tooltip = function() {
         var disable = operation.disabled();
         return disable ?
-            t('operations.reflect.' + disable + '.' + multi) :
-            t('operations.reflect.description.' + axis + '.' + multi);
+            t.append('operations.reflect.' + disable + '.' + multi) :
+            t.append('operations.reflect.description.' + axis + '.' + multi);
     };
 
 
     operation.annotation = function() {
-        return t('operations.reflect.annotation.' + axis + '.' + multi);
+        return t('operations.reflect.annotation.' + axis + '.feature', { n: selectedIDs.length });
     };
 
 
     operation.id = 'reflect-' + axis;
     operation.keys = [t('operations.reflect.key.' + axis)];
-    operation.title = t('operations.reflect.title.' + axis);
+    operation.title = t.append('operations.reflect.title.' + axis);
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

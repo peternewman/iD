@@ -1,45 +1,60 @@
-import { event as d3_event } from 'd3-selection';
-
+import { t } from '../core';
 
 /* Creates a keybinding behavior for an operation */
 export function behaviorOperation(context) {
     var _operation;
 
-    function keypress() {
+    /** @param {KeyboardEvent} d3_event */
+    function keypress(d3_event) {
         // prevent operations during low zoom selection
         if (!context.map().withinEditableZoom()) return;
 
-        d3_event.preventDefault();
-        var disabled = _operation.disabled();
+        // ignore (temporarily) disabled operation keyboard shortcuts,
+        // e.g. Ctrl+C while text is selected
+        if (_operation.availableForKeypress?.() === false) return;
 
-        if (disabled) {
+        d3_event.preventDefault();
+
+        if (!_operation.available()) {
             context.ui().flash
                 .duration(4000)
                 .iconName('#iD-operation-' + _operation.id)
                 .iconClass('operation disabled')
-                .text(_operation.tooltip)();
-
+                .label(t.append('operations._unavailable', {
+                    operation: t.append(`operations.${_operation.id}.title`) || _operation.id
+                }))();
+        } else if (_operation.disabled()) {
+            context.ui().flash
+                .duration(4000)
+                .iconName('#iD-operation-' + _operation.id)
+                .iconClass('operation disabled')
+                .label(_operation.tooltip())();
         } else {
             context.ui().flash
                 .duration(2000)
                 .iconName('#iD-operation-' + _operation.id)
                 .iconClass('operation')
-                .text(_operation.annotation() || _operation.title)();
+                .label(_operation.annotation() || _operation.title)();
 
             if (_operation.point) _operation.point(null);
-            _operation();
+            _operation(d3_event);
         }
     }
 
 
     function behavior() {
         if (_operation && _operation.available()) {
-            context.keybinding()
-                .on(_operation.keys, keypress);
+            behavior.on();
         }
 
         return behavior;
     }
+
+
+    behavior.on = function() {
+        context.keybinding()
+            .on(_operation.keys, keypress);
+    };
 
 
     behavior.off = function() {

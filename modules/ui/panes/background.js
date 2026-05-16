@@ -1,4 +1,3 @@
-
 import { t } from '../../core/localizer';
 import { uiPane } from '../pane';
 
@@ -11,8 +10,8 @@ export function uiPaneBackground(context) {
 
     var backgroundPane = uiPane('background', context)
         .key(t('background.key'))
-        .title(t('background.title'))
-        .description(t('background.description'))
+        .label(t.append('background.title'))
+        .description(t.append('background.description'))
         .iconName('iD-icon-layers')
         .sections([
             uiSectionBackgroundList(context),

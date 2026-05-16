@@ -3,7 +3,9 @@ import RBush from 'rbush';
 import { dispatch as d3_dispatch } from 'd3-dispatch';
 import { json as d3_json } from 'd3-fetch';
 
-import marked from 'marked';
+import { marked } from 'marked';
+import Protobuf from 'pbf';
+import { VectorTile } from '@mapbox/vector-tile';
 
 import { fileFetcher } from '../core/file_fetcher';
 import { localizer } from '../core/localizer';
@@ -49,7 +51,7 @@ function updateRtree(item, replace) {
   }
 }
 
-// Issues shouldn't obscure eachother
+// Issues shouldn't obscure each other
 function preventCoincident(loc) {
   let coincident = false;
   do {
@@ -123,18 +125,26 @@ export default {
       if (_cache.loadedTile[tile.id] || _cache.inflightTile[tile.id]) return;
 
       let [ x, y, z ] = tile.xyz;
-      let url = `${_osmoseUrlRoot}/issues/${z}/${x}/${y}.json?` + utilQsString(params);
+      let url = `${_osmoseUrlRoot}/issues/${z}/${x}/${y}.mvt?` + utilQsString(params);
 
       let controller = new AbortController();
       _cache.inflightTile[tile.id] = controller;
 
-      d3_json(url, { signal: controller.signal })
+      fetch(url, { signal: controller.signal })
+        .then(data => data.arrayBuffer())
         .then(data => {
           delete _cache.inflightTile[tile.id];
           _cache.loadedTile[tile.id] = true;
 
-          if (data.features) {
-            data.features.forEach(issue => {
+          var vectorTile = new VectorTile(new Protobuf(data));
+          data = vectorTile.layers.issues;
+          const features = [];
+          for (let i = 0; i < data.length; i++) {
+            features.push(data.feature(i).toGeoJSON(x, y, z));
+          }
+
+          if (features.length > 0) {
+            features.forEach(issue => {
               const { item, class: cl, uuid: id } = issue.properties;
               /* Osmose issues are uniquely identified by a unique
                 `item` and `class` combination (both integer values) */
@@ -207,7 +217,7 @@ export default {
     // Using multiple individual item + class requests to reduce fetched data size
     const allRequests = items.map(itemType => {
       // No need to request data we already have
-      if (itemType in _cache.strings[locale]) return;
+      if (itemType in _cache.strings[locale]) return null;
 
       const cacheData = data => {
         // Bunch of nested single value arrays of objects
@@ -249,7 +259,7 @@ export default {
       const url = `${_osmoseUrlRoot}/items/${item}/class/${cl}?langs=${locale}`;
 
       return d3_json(url).then(cacheData);
-    });
+    }).filter(Boolean);
 
     return Promise.all(allRequests).then(() => _cache.strings[locale]);
   },

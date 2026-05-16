@@ -1,5 +1,4 @@
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -11,7 +10,7 @@ export function uiSourceSwitch(context) {
     var keys;
 
 
-    function click() {
+    function click(d3_event) {
         d3_event.preventDefault();
 
         var osm = context.connection();
@@ -31,9 +30,10 @@ export function uiSourceSwitch(context) {
         context.flush();                         // remove stored data
 
         d3_select(this)
-            .text(isLive ? t('source_switch.live') : t('source_switch.dev'))
             .classed('live', isLive)
-            .classed('chip', isLive);
+            .classed('chip', isLive)
+            .text('')
+            .call(isLive ? t.append('source_switch.live') : t.append('source_switch.dev'));
 
         osm.switch(isLive ? keys[0] : keys[1]);  // switch connection (warning: dispatches 'change' event)
     }
@@ -42,7 +42,7 @@ export function uiSourceSwitch(context) {
         selection
             .append('a')
             .attr('href', '#')
-            .text(t('source_switch.live'))
+            .call(t.append('source_switch.live'))
             .attr('class', 'live chip')
             .on('click', click);
     };

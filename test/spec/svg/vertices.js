@@ -8,7 +8,7 @@ describe('iD.svgVertices', function () {
 
 
     beforeEach(function () {
-        context = iD.coreContext().init();
+        context = iD.coreContext().assetPath('../dist/').init();
         d3.select(document.createElement('div'))
             .attr('class', 'main-map')
             .call(context.map().centerZoom([0, 0], 17));
@@ -17,10 +17,10 @@ describe('iD.svgVertices', function () {
 
 
     it('adds the .shared class to vertices that are members of two or more ways', function () {
-        var node = iD.osmNode({loc: [0, 0]});
-        var way1 = iD.osmWay({nodes: [node.id], tags: {highway: 'residential'}});
-        var way2 = iD.osmWay({nodes: [node.id], tags: {highway: 'residential'}});
-        var graph = iD.coreGraph([node, way1, way2]);
+        var node = new iD.osmNode({loc: [0, 0]});
+        var way1 = new iD.osmWay({nodes: [node.id], tags: {highway: 'residential'}});
+        var way2 = new iD.osmWay({nodes: [node.id], tags: {highway: 'residential'}});
+        var graph = new iD.coreGraph([node, way1, way2]);
         var filter = function() { return true; };
         var extent = iD.geoExtent([0, 0], [1, 1]);
 

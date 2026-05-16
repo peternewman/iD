@@ -1,3 +1,5 @@
+import { fn } from '@vitest/spy';
+
 describe('uiCombobox', function() {
     var body, context, container, content, input, combobox;
 
@@ -13,25 +15,24 @@ describe('uiCombobox', function() {
         var keyCode = iD.utilKeybinding.keyCodes[key];
         var value = input.property('value');
         var start = input.property('selectionStart');
-        var finis = input.property('selectionEnd');
+        var finish = input.property('selectionEnd');
 
-        d3.customEvent(happen.makeEvent({
-            type: 'keydown',
-            keyCode: keyCode
-        }), input.on('keydown.combo-input'));
+        input.node().dispatchEvent(new KeyboardEvent('keydown', { keyCode }));
 
         switch (key) {
             case '⇥':
                 break;
 
             case '←':
-                start = finis = Math.max(0, start - 1);
-                input.node().setSelectionRange(start, finis);
+                start = Math.max(0, start - 1);
+                finish = start;
+                input.node().setSelectionRange(start, finish);
                 break;
 
             case '→':
-                start = finis = Math.max(start + 1, value.length);
-                input.node().setSelectionRange(start, finis);
+                start = Math.max(start + 1, value.length);
+                finish = start;
+                input.node().setSelectionRange(start, finish);
                 break;
 
             case '↑':
@@ -41,32 +42,32 @@ describe('uiCombobox', function() {
                 break;
 
             case '⌫':
-                value = value.substring(0, start - (start === finis ? 1 : 0)) +
-                    value.substring(finis, value.length);
+                value = value.substring(0, start - (start === finish ? 1 : 0)) +
+                    value.substring(finish, value.length);
                 input.property('value', value);
-                happen.once(input.node(), {type: 'input'});
+                input.node().dispatchEvent(new MouseEvent('input'));
                 break;
 
             case '⌦':
                 value = value.substring(0, start) +
-                    value.substring(finis + (start === finis ? 1 : 0), value.length);
+                    value.substring(finish + (start === finish ? 1 : 0), value.length);
                 input.property('value', value);
-                happen.once(input.node(), {type: 'input'});
+                input.node().dispatchEvent(new MouseEvent('input'));
                 break;
 
             default:
-                value = value.substring(0, start) + key + value.substring(finis, value.length);
+                value = value.substring(0, start) + key + value.substring(finish, value.length);
                 input.property('value', value);
-                happen.once(input.node(), {type: 'input'});
+                input.node().dispatchEvent(new MouseEvent('input'));
         }
 
-        happen.keyup(input.node(), {keyCode: keyCode});
+        input.node().dispatchEvent(new KeyboardEvent('keyup', { keyCode }));
     }
 
     beforeEach(function() {
         body = d3.select('body');
         container = body.append('div').attr('class', 'ideditor');
-        context = iD.coreContext().init().container(container);
+        context = iD.coreContext().assetPath('../dist/').init().container(container);
         content = container.append('div');
         input = content.append('input');
         combobox = iD.uiCombobox(context);
@@ -80,7 +81,6 @@ describe('uiCombobox', function() {
 
     function focusTypeahead(input) {
         input.node().focus();
-        d3.customEvent(happen.makeEvent('focus'), input.on('focus.combo-input'));
     }
 
     it('adds the combobox-input class', function() {
@@ -92,7 +92,7 @@ describe('uiCombobox', function() {
         input.call(combobox.data(data));
         focusTypeahead(input);
         simulateKeypress('↓');
-        expect(d3.select('.ideditor > div.combobox').nodes().length).to.equal(1);
+        expect(d3.selectAll('.ideditor > div.combobox').size()).to.equal(1);
     });
 
     it('filters entries to those matching the value', function() {
@@ -182,7 +182,7 @@ describe('uiCombobox', function() {
     it('does not select when value is empty', function() {
         input.call(combobox.data(data));
         focusTypeahead(input);
-        happen.once(input.node(), {type: 'input'});
+        input.node().dispatchEvent(new MouseEvent('input'));
         expect(body.selectAll('.combobox-option.selected').size()).to.equal(0);
     });
 
@@ -235,32 +235,28 @@ describe('uiCombobox', function() {
         expect(input.property('value')).to.equal('foobar');
     });
 
-    it('emits accepted event with selected datum on ⇥', function(done) {
-        combobox.on('accept', function(d) {
-            expect(d).to.eql({title: 'bar', value: 'bar'});
-            combobox.on('accept', null);
-            done();
-        });
+    it('emits accepted event with selected datum on ⇥', async () => {
+        const d = new Promise(cb => { combobox.on('accept', cb); });
         input.call(combobox.data(data));
         focusTypeahead(input);
         simulateKeypress('b');
         simulateKeypress('⇥');
+        expect(await d).to.eql({title: 'bar', value: 'bar'});
+        combobox.on('accept', null);
     });
 
-    it('emits accepted event with selected datum on ↩', function(done) {
-        combobox.on('accept', function(d) {
-            expect(d).to.eql({title: 'bar', value: 'bar'});
-            combobox.on('accept', null);
-            done();
-        });
+    it('emits accepted event with selected datum on ↩', async () => {
+        const d = new Promise(cb => { combobox.on('accept', cb); });
         input.call(combobox.data(data));
         focusTypeahead(input);
         simulateKeypress('b');
         simulateKeypress('↩');
+        expect(await d).to.eql({title: 'bar', value: 'bar'});
+        combobox.on('accept', null);
     });
 
     it('emits cancel event on ⎋', function() {
-        var spy = sinon.spy();
+        const spy = fn();
         combobox.on('cancel', spy);
 
         input.call(combobox.data(data));

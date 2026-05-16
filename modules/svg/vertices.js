@@ -1,10 +1,11 @@
-import deepEqual from 'fast-deep-equal';
+import { deepEqual } from 'fast-equals';
 import { select as d3_select } from 'd3-selection';
 
 import { presetManager } from '../presets';
 import { geoScaleToZoom } from '../geo';
 import { osmEntity } from '../osm';
 import { svgPassiveVertex, svgPointTransform } from './helpers';
+import { svgTagClasses } from './tag_classes';
 
 export function svgVertices(projection, context) {
     var radiuses = {
@@ -140,6 +141,7 @@ export function svgVertices(projection, context) {
             .classed('retagged', function(d) {
                 return base.entities[d.id] && !deepEqual(graph.entities[d.id].tags, base.entities[d.id].tags);
             })
+            .call(svgTagClasses())
             .call(updateAttributes);
 
         // Vertices with icons get a `use`.
@@ -155,13 +157,12 @@ export function svgVertices(projection, context) {
         iconUse.enter()
             .append('use')
             .attr('class', 'icon')
-            .attr('width', '11px')
-            .attr('height', '11px')
-            .attr('transform', 'translate(-5.5, -5.5)')
+            .attr('width', '12px')
+            .attr('height', '12px')
+            .attr('transform', 'translate(-6, -6)')
             .attr('xlink:href', function(d) {
                 var picon = getIcon(d);
-                var isMaki = /^maki-/.test(picon);
-                return '#' + picon + (isMaki ? '-11' : '');
+                return picon ? '#' + picon : '';
             });
 
 
@@ -193,8 +194,8 @@ export function svgVertices(projection, context) {
             .attr('class', 'viewfield')
             .attr('d', 'M0,0H0')
             .merge(viewfields)
-            .attr('marker-start', 'url(#ideditor-viewfield-marker' + (wireframe ? '-wireframe' : '') + ')')
-            .attr('transform', function(d) { return 'rotate(' + d + ')'; });
+            .attr('marker-start', d => 'url(#ideditor-viewfield-marker' + (d.type === 'side' ? '-side' : '') + (wireframe ? '-wireframe' : '') + ')')
+            .attr('transform', d => `rotate(${d.angle})`);
     }
 
 
@@ -304,7 +305,7 @@ export function svgVertices(projection, context) {
 
         function addChildVertices(entity) {
 
-            // avoid redunant work and infinite recursion of circular relations
+            // avoid redundant work and infinite recursion of circular relations
             if (seenIds[entity.id]) return;
             seenIds[entity.id] = true;
 
@@ -368,7 +369,7 @@ export function svgVertices(projection, context) {
         }
 
         // Collect important vertices from the `entities` list..
-        // (during a paritial redraw, it will not contain everything)
+        // (during a partial redraw, it will not contain everything)
         for (var i = 0; i < entities.length; i++) {
             var entity = entities[i];
             var geometry = entity.geometry(graph);

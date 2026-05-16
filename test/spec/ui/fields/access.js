@@ -2,7 +2,7 @@ describe('iD.uiFieldAccess', function() {
     var context, selection, field;
 
     beforeEach(function() {
-        context = iD.coreContext().init();
+        context = iD.coreContext().assetPath('../dist/').init();
         selection = d3.select(document.createElement('div'));
         field = iD.presetField('access', {
             keys: ['access', 'foot', 'motor_vehicle', 'bicycle', 'horse'],
@@ -110,6 +110,40 @@ describe('iD.uiFieldAccess', function() {
 
         access.tags({highway: 'cycleway', access: 'destination'});
         expect(selection.selectAll('.preset-input-access-motor_vehicle').attr('placeholder')).to.equal('destination');
+    });
+
+    it('sets bicycle and motor_vehicle placeholder to the value of the "vehicle" tag (id-tagging-schema#378)', function() {
+        var access = iD.uiFieldAccess(field, context);
+        selection.call(access);
+
+        access.tags({highway: 'residential', vehicle: 'destination'});
+        expect(selection.selectAll('.preset-input-access-motor_vehicle').attr('placeholder')).to.equal('destination');
+        expect(selection.selectAll('.preset-input-access-bicycle').attr('placeholder')).to.equal('destination');
+    });
+
+    it('sets foot, bicycle and horse placeholder to "no" when there a "motorroad=yes" tag (#9333)', function() {
+        var access = iD.uiFieldAccess(field, context);
+        selection.call(access);
+
+        access.tags({highway: 'primary', motorroad: 'yes'});
+        expect(selection.selectAll('.preset-input-access-foot').attr('placeholder')).to.equal('no');
+        expect(selection.selectAll('.preset-input-access-bicycle').attr('placeholder')).to.equal('no');
+        expect(selection.selectAll('.preset-input-access-horse').attr('placeholder')).to.equal('no');
+    });
+
+    it('sets correct placeholder on a multi selection', function() {
+        var access = iD.uiFieldAccess(field, context);
+        selection.call(access);
+
+        var tags = {highway: 'primary', foot: ['yes', 'no'], bicycle: ['no', undefined], vehicle: ['no', undefined]};
+        tags[Symbol.for('allTags')] = [
+            {highway: 'primary', foot: 'yes', bicycle: 'no'},
+            {highway: 'primary', foot: 'no', vehicle: 'no'}
+        ];
+        access.tags(tags);
+        expect(selection.selectAll('.preset-input-access-foot').attr('placeholder')).to.equal(iD.localizer.t('inspector.multiple_values'));
+        expect(selection.selectAll('.preset-input-access-bicycle').attr('placeholder')).to.equal('no');
+        expect(selection.selectAll('.preset-input-access-motor_vehicle').attr('placeholder')).to.equal(iD.localizer.t('inspector.multiple_values'));
     });
 
 });

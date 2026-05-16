@@ -1,3 +1,5 @@
+import { select as d3_select } from 'd3-selection';
+
 import { t } from '../../core/localizer';
 import { uiTooltip } from '../tooltip';
 import { uiSection } from '../section';
@@ -7,7 +9,7 @@ export function uiSectionMapFeatures(context) {
     var _features = context.features().keys();
 
     var section = uiSection('map-features', context)
-        .title(t('map_data.map_features'))
+        .label(() => t.append('map_data.map_features'))
         .disclosureContent(renderDisclosureContent)
         .expandedByDefault(false);
 
@@ -31,19 +33,23 @@ export function uiSectionMapFeatures(context) {
         footer
             .append('a')
             .attr('class', 'feature-list-link')
+            .attr('role', 'button')
             .attr('href', '#')
-            .text(t('issues.enable_all'))
-            .on('click', function() {
-                context.features().enableAll();
+            .call(t.append('issues.disable_all'))
+            .on('click', function(d3_event) {
+                d3_event.preventDefault();
+                context.features().disableAll();
             });
 
         footer
             .append('a')
             .attr('class', 'feature-list-link')
+            .attr('role', 'button')
             .attr('href', '#')
-            .text(t('issues.disable_all'))
-            .on('click', function() {
-                context.features().disableAll();
+            .call(t.append('issues.enable_all'))
+            .on('click', function(d3_event) {
+                d3_event.preventDefault();
+                context.features().enableAll();
             });
 
         // Update
@@ -67,10 +73,13 @@ export function uiSectionMapFeatures(context) {
             .append('li')
             .call(uiTooltip()
                 .title(function(d) {
-                    var tip = t(name + '.' + d + '.tooltip');
+                    var tip = t.append(name + '.' + d + '.tooltip');
                     if (autoHiddenFeature(d)) {
-                        var msg = showsLayer('osm') ? t('map_data.autohidden') : t('map_data.osmhidden');
-                        tip += '<div>' + msg + '</div>';
+                        var msg = showsLayer('osm') ? t.append('map_data.autohidden') : t.append('map_data.osmhidden');
+                        return selection => {
+                            selection.call(tip);
+                            selection.append('div').call(msg);
+                        };
                     }
                     return tip;
                 })
@@ -88,7 +97,9 @@ export function uiSectionMapFeatures(context) {
 
         label
             .append('span')
-            .text(function(d) { return t(name + '.' + d + '.description'); });
+            .each(function(d) {
+                d3_select(this).call(t.append(name + '.' + d + '.description'));
+            });
 
         // Update
         items = items
@@ -109,7 +120,7 @@ export function uiSectionMapFeatures(context) {
         return context.features().enabled(d);
     }
 
-    function clickFeature(d) {
+    function clickFeature(d3_event, d) {
         context.features().toggle(d);
     }
 

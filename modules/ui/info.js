@@ -1,5 +1,4 @@
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -59,12 +58,17 @@ export function uiInfo(context) {
 
             title
                 .append('h3')
-                .text(function(d) { return panels[d].title; });
+                .each(function(d) { return panels[d].label(d3_select(this)); });
 
             title
                 .append('button')
                 .attr('class', 'close')
-                .on('click', function (d) { info.toggle(d); })
+                .attr('title', t('icons.close'))
+                .on('click', function(d3_event, d) {
+                    d3_event.stopImmediatePropagation();
+                    d3_event.preventDefault();
+                    info.toggle(d);
+                })
                 .call(svgIcon('#iD-icon-close'));
 
             enter
@@ -81,11 +85,6 @@ export function uiInfo(context) {
 
 
         info.toggle = function(which) {
-            if (d3_event) {
-                d3_event.stopImmediatePropagation();
-                d3_event.preventDefault();
-            }
-
             var activeids = ids.filter(function(k) { return active[k]; });
 
             if (which) {  // toggle one
@@ -123,13 +122,22 @@ export function uiInfo(context) {
         redraw();
 
         context.keybinding()
-            .on(uiCmd('⌘' + t('info_panels.key')), info.toggle);
+            .on(uiCmd('⌘' + t('info_panels.key')), function(d3_event) {
+                if (d3_event.shiftKey) return;
+                d3_event.stopImmediatePropagation();
+                d3_event.preventDefault();
+                info.toggle();
+            });
 
         ids.forEach(function(k) {
             var key = t('info_panels.' + k + '.key', { default: null });
             if (!key) return;
             context.keybinding()
-                .on(uiCmd('⌘⇧' + key), function() { info.toggle(k); });
+                .on(uiCmd('⌘⇧' + key), function(d3_event) {
+                    d3_event.stopImmediatePropagation();
+                    d3_event.preventDefault();
+                    info.toggle(k);
+                });
         });
     }
 

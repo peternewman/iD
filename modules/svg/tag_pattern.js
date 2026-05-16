@@ -1,4 +1,3 @@
-
 // Patterns only work in Firefox when set directly on element.
 // (This is not a bug: https://bugzilla.mozilla.org/show_bug.cgi?id=750632)
 var patterns = {
@@ -30,16 +29,16 @@ var patterns = {
             { pattern: 'forest' } // same as 'leaf_type:mixed'
         ],
         grave_yard: 'cemetery',
-        grass: [
-            { golf: 'green', pattern: 'golf_green' },
-            { pattern: 'grass' },
-        ],
+        grass: 'grass',
         landfill: 'landfill',
         meadow: 'meadow',
         military: 'construction',
         orchard: 'orchard',
         quarry: 'quarry',
         vineyard: 'vineyard'
+    },
+    leisure: {
+        horse_riding: 'farmyard'
     },
     natural: {
         beach: 'beach',
@@ -65,16 +64,15 @@ var patterns = {
             { pattern: 'forest' } // same as 'leaf_type:mixed'
         ]
     },
-    traffic_calming: {
-        island: [
-            { surface: 'grass', pattern: 'grass' },
-        ],
-        chicane: [
-            { surface: 'grass', pattern: 'grass' },
-        ],
-        choker: [
-            { surface: 'grass', pattern: 'grass' },
-        ]
+    golf: {
+        green: 'golf_green',
+        tee: 'grass',
+        fairway: 'grass',
+        rough: 'scrub'
+    },
+    surface: {
+        grass: 'grass',
+        sand: 'beach'
     }
 };
 

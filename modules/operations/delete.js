@@ -43,7 +43,7 @@ export function operationDelete(context, selectedIDs) {
                 }
 
                 nextSelectedID = nodes[i];
-                nextSelectedLoc = context.entity(nextSelectedID).loc;
+                nextSelectedLoc = nextSelectedID && context.entity(nextSelectedID).loc;
             }
         }
 
@@ -131,21 +131,21 @@ export function operationDelete(context, selectedIDs) {
     operation.tooltip = function() {
         var disable = operation.disabled();
         return disable ?
-            t('operations.delete.' + disable + '.' + multi) :
-            t('operations.delete.description' + '.' + multi);
+            t.append('operations.delete.' + disable + '.' + multi) :
+            t.append('operations.delete.description.' + multi);
     };
 
 
     operation.annotation = function() {
         return selectedIDs.length === 1 ?
             t('operations.delete.annotation.' + context.graph().geometry(selectedIDs[0])) :
-            t('operations.delete.annotation.multiple', { n: selectedIDs.length });
+            t('operations.delete.annotation.feature', { n: selectedIDs.length });
     };
 
 
     operation.id = 'delete';
     operation.keys = [uiCmd('⌘⌫'), uiCmd('⌘⌦'), uiCmd('⌦')];
-    operation.title = t('operations.delete.title');
+    operation.title = t.append('operations.delete.title');
     operation.behavior = behaviorOperation(context).which(operation);
 
     return operation;

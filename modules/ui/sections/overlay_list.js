@@ -1,7 +1,6 @@
-import _debounce from 'lodash-es/debounce';
+import { debounce } from 'es-toolkit/compat';
 import { descending as d3_descending, ascending as d3_ascending } from 'd3-array';
 import {
-    event as d3_event,
     select as d3_select
 } from 'd3-selection';
 
@@ -12,7 +11,7 @@ import { uiSection } from '../section';
 export function uiSectionOverlayList(context) {
 
     var section = uiSection('overlay-list', context)
-        .title(t('background.overlays'))
+        .label(() => t.append('background.overlays'))
         .disclosureContent(renderDisclosureContent);
 
     var _overlayList = d3_select(null);
@@ -30,7 +29,7 @@ export function uiSectionOverlayList(context) {
             if (description || isOverflowing) {
                 item.call(uiTooltip()
                     .placement(placement)
-                    .title(description || d.name())
+                    .title(() => description || d.name())
                 );
             }
         });
@@ -49,7 +48,7 @@ export function uiSectionOverlayList(context) {
     }
 
 
-    function chooseOverlay(d) {
+    function chooseOverlay(d3_event, d) {
         d3_event.preventDefault();
         context.background().toggleOverlayLayer(d);
         _overlayList.call(updateLayerSelections);
@@ -81,7 +80,7 @@ export function uiSectionOverlayList(context) {
 
         label
             .append('span')
-            .text(function(d) { return d.name(); });
+            .each(function(d) { d.label()(d3_select(this)); });
 
 
         layerList.selectAll('li')
@@ -115,7 +114,7 @@ export function uiSectionOverlayList(context) {
 
     context.map()
         .on('move.overlay_list',
-            _debounce(function() {
+            debounce(function() {
                 // layers in-view may have changed due to map move
                 window.requestIdleCallback(section.reRender);
             }, 1000)

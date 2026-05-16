@@ -1,28 +1,85 @@
 describe('iD.actionConnect', function() {
-    it('chooses the first non-new node as the survivor', function() {
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b', version: '1'}),
-            iD.osmNode({id: 'c', version: '1'})
+    it('merges tags', function() {
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a', tags: { highway: 'traffic_signals' }}),
+            new iD.osmNode({id: 'b', tags: { crossing: 'marked' }}),
         ]);
 
-        graph = iD.actionConnect(['a', 'b', 'c'])(graph);
+        graph = iD.actionConnect(['a', 'b'])(graph);
         expect(graph.hasEntity('a')).not.to.be.ok;
-        expect(graph.hasEntity('b')).to.be.ok;
-        expect(graph.hasEntity('c')).not.to.be.ok;
+
+        var survivor = graph.hasEntity('b');
+        expect(survivor).to.be.an.instanceof(iD.osmNode);
+        expect(survivor.tags).to.eql({ highway: 'traffic_signals', crossing: 'marked' }, 'merge all tags');
+    });
+
+    it('chooses the oldest node as the survivor', function() {
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'n3'}),
+            new iD.osmNode({id: 'n-1'}),
+            new iD.osmNode({id: 'n2'}),
+            new iD.osmNode({id: 'n4'})
+        ]);
+
+        graph = iD.actionConnect(['n3', 'n-1', 'n2', 'n4'])(graph);
+        expect(graph.hasEntity('n3')).not.to.be.ok;
+        expect(graph.hasEntity('n-1')).not.to.be.ok;
+        expect(graph.hasEntity('n2')).to.be.ok;
+        expect(graph.hasEntity('n4')).not.to.be.ok;
+    });
+
+    it('chooses the oldest interesting node as the survivor', function() {
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'n3'}),
+            new iD.osmNode({id: 'n1'}),
+            new iD.osmNode({id: 'n2', tags: { highway: 'traffic_signals' }}),
+            new iD.osmNode({id: 'n4', tags: { crossing: 'marked' }})
+        ]);
+
+        graph = iD.actionConnect(['n3', 'n1', 'n2', 'n4'])(graph);
+
+        expect(graph.hasEntity('n3')).not.to.be.ok;
+        expect(graph.hasEntity('n1')).not.to.be.ok;
+        expect(graph.hasEntity('n4')).not.to.be.ok;
+
+        var survivor = graph.hasEntity('n2');
+        expect(survivor).to.be.an.instanceof(iD.osmNode);
+        expect(survivor.tags).to.eql({ highway: 'traffic_signals', crossing: 'marked' }, 'merge all tags');
+    });
+
+    it('chooses an existing node as the survivor', function() {
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'n3'}),
+            new iD.osmNode({id: 'n-1'}),
+            new iD.osmNode({id: 'n-2', tags: { highway: 'traffic_signals' }}),
+            new iD.osmNode({id: 'n-4', tags: { crossing: 'marked' }})
+        ]);
+
+        graph = iD.actionConnect(['n3', 'n-1', 'n-2', 'n-4'])(graph);
+
+        expect(graph.hasEntity('n-1')).not.to.be.ok;
+        expect(graph.hasEntity('n-2')).not.to.be.ok;
+        expect(graph.hasEntity('n-4')).not.to.be.ok;
+
+        var survivor = graph.hasEntity('n3');
+        expect(survivor).to.be.an.instanceof(iD.osmNode);
+        expect(survivor.tags).to.eql({ highway: 'traffic_signals', crossing: 'marked' }, 'merge all tags');
     });
 
     it('chooses the last node as the survivor when all are new', function() {
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a', tags: { highway: 'traffic_signals' }}),
+            new iD.osmNode({id: 'b', tags: { crossing: 'marked' }}),
+            new iD.osmNode({id: 'c'})
         ]);
 
         graph = iD.actionConnect(['a', 'b', 'c'])(graph);
         expect(graph.hasEntity('a')).not.to.be.ok;
         expect(graph.hasEntity('b')).not.to.be.ok;
-        expect(graph.hasEntity('c')).to.be.ok;
+
+        var survivor = graph.hasEntity('c');
+        expect(survivor).to.be.an.instanceof(iD.osmNode);
+        expect(survivor.tags).to.eql({ highway: 'traffic_signals', crossing: 'marked' }, 'merge all tags');
     });
 
 
@@ -41,14 +98,14 @@ describe('iD.actionConnect', function() {
         //       |
         //       d
         //
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmNode({id: 'd'}),
-            iD.osmNode({id: 'e'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-            iD.osmWay({id: '|', nodes: ['d', 'e']})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmNode({id: 'd'}),
+            new iD.osmNode({id: 'e'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+            new iD.osmWay({id: '|', nodes: ['d', 'e']})
         ]);
 
         graph = iD.actionConnect(['e', 'b'])(graph);
@@ -65,14 +122,14 @@ describe('iD.actionConnect', function() {
         //
         // Connect [a, d].
         //
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmNode({id: 'd'}),
-            iD.osmNode({id: 'e'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b', 'c', 'a']}),
-            iD.osmWay({id: '=', nodes: ['d', 'e']})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmNode({id: 'd'}),
+            new iD.osmNode({id: 'e'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b', 'c', 'a']}),
+            new iD.osmWay({id: '=', nodes: ['d', 'e']})
         ]);
 
         graph = iD.actionConnect(['a', 'd'])(graph);
@@ -88,11 +145,11 @@ describe('iD.actionConnect', function() {
         //
         // a --- c
         //
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b', 'c']})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']})
         ]);
 
         graph = iD.actionConnect(['b', 'c'])(graph);
@@ -113,13 +170,13 @@ describe('iD.actionConnect', function() {
         //       |
         //       d
         //
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-            iD.osmWay({id: '|', nodes: ['b', 'd']})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+            new iD.osmWay({id: '|', nodes: ['b', 'd']})
         ]);
 
         graph = iD.actionConnect(['b', 'c'])(graph);
@@ -133,10 +190,10 @@ describe('iD.actionConnect', function() {
         //
         // Connect [a, b]
         //
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b']})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b']})
         ]);
 
         graph = iD.actionConnect(['a', 'b'])(graph);
@@ -145,10 +202,10 @@ describe('iD.actionConnect', function() {
     });
 
     it('merges tags to the surviving node', function() {
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a', tags: {a: 'a'}}),
-            iD.osmNode({id: 'b', tags: {b: 'b'}}),
-            iD.osmNode({id: 'c', tags: {c: 'c'}})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a', tags: {a: 'a'}}),
+            new iD.osmNode({id: 'b', tags: {b: 'b'}}),
+            new iD.osmNode({id: 'c', tags: {c: 'c'}})
         ]);
 
         graph = iD.actionConnect(['a', 'b', 'c'])(graph);
@@ -156,15 +213,15 @@ describe('iD.actionConnect', function() {
     });
 
     it('merges memberships to the surviving node', function() {
-        var graph = iD.coreGraph([
-            iD.osmNode({id: 'a'}),
-            iD.osmNode({id: 'b'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmNode({id: 'c'}),
-            iD.osmWay({id: '-', nodes: ['a', 'b']}),
-            iD.osmWay({id: '=', nodes: ['c', 'd']}),
-            iD.osmRelation({id: 'r1', members: [{id: 'b', role: 'r1', type: 'node'}]}),
-            iD.osmRelation({id: 'r2', members: [{id: 'b', role: 'r2', type: 'node'}, {id: 'c', role: 'r2', type: 'node'}]})
+        var graph = new iD.coreGraph([
+            new iD.osmNode({id: 'a'}),
+            new iD.osmNode({id: 'b'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmNode({id: 'c'}),
+            new iD.osmWay({id: '-', nodes: ['a', 'b']}),
+            new iD.osmWay({id: '=', nodes: ['c', 'd']}),
+            new iD.osmRelation({id: 'r1', members: [{id: 'b', role: 'r1', type: 'node'}]}),
+            new iD.osmRelation({id: 'r2', members: [{id: 'b', role: 'r2', type: 'node'}, {id: 'c', role: 'r2', type: 'node'}]})
         ]);
 
         graph = iD.actionConnect(['b', 'c'])(graph);
@@ -175,12 +232,12 @@ describe('iD.actionConnect', function() {
 
     describe('#disabled', function () {
         it('returns falsy when connecting members of the same relation and same roles', function () {
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmRelation({id: 'r1', members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmRelation({id: 'r1', members: [
                     { id: 'b', type: 'node', role: 'foo' },
                     { id: 'c', type: 'node', role: 'foo' }
                 ]})
@@ -190,25 +247,25 @@ describe('iD.actionConnect', function() {
         });
 
         it('returns falsy when connecting members of different relation and different roles', function () {
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmRelation({id: 'r1', members: [{ id: 'b', type: 'node', role: 'foo' } ]}),
-                iD.osmRelation({id: 'r2', members: [{ id: 'c', type: 'node', role: 'bar' } ]})
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmRelation({id: 'r1', members: [{ id: 'b', type: 'node', role: 'foo' } ]}),
+                new iD.osmRelation({id: 'r2', members: [{ id: 'c', type: 'node', role: 'bar' } ]})
             ]);
 
             expect(iD.actionConnect(['b', 'c']).disabled(graph)).to.be.not.ok;
         });
 
         it('returns \'relation\' when connecting members of the same relation but different roles', function () {
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmRelation({id: 'r1', members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmRelation({id: 'r1', members: [
                     { id: 'b', type: 'node', role: 'foo' },
                     { id: 'c', type: 'node', role: 'bar' }
                 ]})
@@ -224,16 +281,16 @@ describe('iD.actionConnect', function() {
             //        |                        VIA  'b'
             //        c                        TO   '|'
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b']}),
-                iD.osmWay({id: '|', nodes: ['b', 'c']}),
-                iD.osmWay({id: '~', nodes: ['d', 'e']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b']}),
+                new iD.osmWay({id: '|', nodes: ['b', 'c']}),
+                new iD.osmWay({id: '~', nodes: ['d', 'e']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
                     { id: '-', type: 'way', role: 'from' },
                     { id: 'b', type: 'node', role: 'via' },
                     { id: '|', type: 'way', role: 'to' }
@@ -253,15 +310,15 @@ describe('iD.actionConnect', function() {
             //              |            TO   '|'
             //              e
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
                     { id: '-', type: 'way', role: 'from' },
                     { id: 'c', type: 'node', role: 'via' },
                     { id: '|', type: 'way', role: 'to' }
@@ -283,18 +340,18 @@ describe('iD.actionConnect', function() {
             //              |            TO   '-'
             //  g === f === e
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmNode({id: 'f'}),
-                iD.osmNode({id: 'g'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
-                iD.osmWay({id: '=', nodes: ['e', 'f', 'g']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmNode({id: 'f'}),
+                new iD.osmNode({id: 'g'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
+                new iD.osmWay({id: '=', nodes: ['e', 'f', 'g']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
                     { id: '=', type: 'way', role: 'from' },
                     { id: '|', type: 'way', role: 'via' },
                     { id: '-', type: 'way', role: 'to' }
@@ -318,15 +375,15 @@ describe('iD.actionConnect', function() {
             //              |            TO   '|'
             //              e
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
                     { id: '-', type: 'way', role: 'from' },
                     { id: 'c', type: 'node', role: 'via' },
                     { id: '|', type: 'way', role: 'to' }
@@ -348,15 +405,15 @@ describe('iD.actionConnect', function() {
             //              |            TO   '-'
             //              e
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
                     { id: '-', type: 'way', role: 'from' },
                     { id: 'c', type: 'node', role: 'via' },
                     { id: '-', type: 'way', role: 'to' }
@@ -376,18 +433,18 @@ describe('iD.actionConnect', function() {
             //              |            TO   '-'
             //  g === f === e
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmNode({id: 'e'}),
-                iD.osmNode({id: 'f'}),
-                iD.osmNode({id: 'g'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
-                iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
-                iD.osmWay({id: '=', nodes: ['e', 'f', 'g']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmNode({id: 'e'}),
+                new iD.osmNode({id: 'f'}),
+                new iD.osmNode({id: 'g'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b', 'c']}),
+                new iD.osmWay({id: '|', nodes: ['c', 'd', 'e']}),
+                new iD.osmWay({id: '=', nodes: ['e', 'f', 'g']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
                     { id: '=', type: 'way', role: 'from' },
                     { id: '|', type: 'way', role: 'via' },
                     { id: '-', type: 'way', role: 'to' }
@@ -412,13 +469,13 @@ describe('iD.actionConnect', function() {
             //        |            VIA  'b'
             //        c            TO   '|'
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b']}),
-                iD.osmWay({id: '|', nodes: ['b', 'c']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b']}),
+                new iD.osmWay({id: '|', nodes: ['b', 'c']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_right_turn' }, members: [
                     { id: '-', type: 'way', role: 'from' },
                     { id: 'b', type: 'node', role: 'via' },
                     { id: '|', type: 'way', role: 'to' }
@@ -436,15 +493,15 @@ describe('iD.actionConnect', function() {
             //        |            VIA  '|'
             //  d === c            TO   '-'
             //
-            var graph = iD.coreGraph([
-                iD.osmNode({id: 'a'}),
-                iD.osmNode({id: 'b'}),
-                iD.osmNode({id: 'c'}),
-                iD.osmNode({id: 'd'}),
-                iD.osmWay({id: '-', nodes: ['a', 'b']}),
-                iD.osmWay({id: '|', nodes: ['b', 'c']}),
-                iD.osmWay({id: '=', nodes: ['c', 'd']}),
-                iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
+            var graph = new iD.coreGraph([
+                new iD.osmNode({id: 'a'}),
+                new iD.osmNode({id: 'b'}),
+                new iD.osmNode({id: 'c'}),
+                new iD.osmNode({id: 'd'}),
+                new iD.osmWay({id: '-', nodes: ['a', 'b']}),
+                new iD.osmWay({id: '|', nodes: ['b', 'c']}),
+                new iD.osmWay({id: '=', nodes: ['c', 'd']}),
+                new iD.osmRelation({id: 'r1', tags: { type: 'restriction', restriction: 'no_u_turn' }, members: [
                     { id: '=', type: 'way', role: 'from' },
                     { id: '|', type: 'way', role: 'via' },
                     { id: '-', type: 'way', role: 'to' }

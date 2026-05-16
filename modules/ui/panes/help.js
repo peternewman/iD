@@ -1,13 +1,13 @@
+import { select as d3_select } from 'd3-selection';
+import { marked } from 'marked';
 
-import marked from 'marked';
 import { svgIcon } from '../../svg/icon';
 import { uiIntro } from '../intro/intro';
-import { uiShortcuts } from '../shortcuts';
 import { uiPane } from '../pane';
 
 import { t, localizer } from '../../core/localizer';
 import { uiTooltip } from '../tooltip';
-import { helpString } from '../intro/helper';
+import { helpHtml } from '../intro/helper';
 
 export function uiPaneHelp(context) {
 
@@ -20,6 +20,7 @@ export function uiPaneHelp(context) {
             'before_start',
             'open_source_h',
             'open_source',
+            'open_source_attribution',
             'open_source_help'
         ]],
         ['overview', [
@@ -142,6 +143,25 @@ export function uiPaneHelp(context) {
             'boundary',
             'boundary_add'
         ]],
+        ['operations', [
+            'intro',
+            'intro_2',
+            'straighten',
+            'orthogonalize',
+            'circularize',
+            'move',
+            'rotate',
+            'reflect',
+            'continue',
+            'reverse',
+            'disconnect',
+            'split',
+            'extract',
+            'merge',
+            'delete',
+            'downgrade',
+            'copy_paste'
+        ]],
         ['notes', [
             'intro',
             'add_note_h',
@@ -187,51 +207,51 @@ export function uiPaneHelp(context) {
     ];
 
     var headings = {
-        'help.help.open_data_h': 3,
-        'help.help.before_start_h': 3,
-        'help.help.open_source_h': 3,
-        'help.overview.navigation_h': 3,
-        'help.overview.features_h': 3,
-        'help.editing.select_h': 3,
-        'help.editing.multiselect_h': 3,
-        'help.editing.undo_redo_h': 3,
-        'help.editing.save_h': 3,
-        'help.editing.upload_h': 3,
+        'help.areas.add_area_h': 3,
+        'help.areas.delete_area_h': 3,
+        'help.areas.modify_area_h': 3,
+        'help.areas.point_or_area_h': 3,
+        'help.areas.square_area_h': 3,
         'help.editing.backups_h': 3,
         'help.editing.keyboard_h': 3,
-        'help.feature_editor.type_h': 3,
+        'help.editing.multiselect_h': 3,
+        'help.editing.save_h': 3,
+        'help.editing.select_h': 3,
+        'help.editing.undo_redo_h': 3,
+        'help.editing.upload_h': 3,
         'help.feature_editor.fields_h': 3,
         'help.feature_editor.tags_h': 3,
-        'help.points.add_point_h': 3,
-        'help.points.move_point_h': 3,
-        'help.points.delete_point_h': 3,
+        'help.feature_editor.type_h': 3,
+        'help.gps.using_h': 3,
+        'help.help.before_start_h': 3,
+        'help.help.open_data_h': 3,
+        'help.help.open_source_h': 3,
+        'help.imagery.offsets_h': 3,
+        'help.imagery.sources_h': 3,
         'help.lines.add_line_h': 3,
-        'help.lines.modify_line_h': 3,
         'help.lines.connect_line_h': 3,
-        'help.lines.disconnect_line_h': 3,
-        'help.lines.move_line_h': 3,
         'help.lines.delete_line_h': 3,
-        'help.areas.point_or_area_h': 3,
-        'help.areas.add_area_h': 3,
-        'help.areas.square_area_h': 3,
-        'help.areas.modify_area_h': 3,
-        'help.areas.delete_area_h': 3,
+        'help.lines.disconnect_line_h': 3,
+        'help.lines.modify_line_h': 3,
+        'help.lines.move_line_h': 3,
+        'help.notes.add_note_h': 3,
+        'help.notes.save_note_h': 3,
+        'help.notes.update_note_h': 3,
+        'help.overview.features_h': 3,
+        'help.overview.navigation_h': 3,
+        'help.points.add_point_h': 3,
+        'help.points.delete_point_h': 3,
+        'help.points.move_point_h': 3,
+        'help.qa.issues_h': 3,
+        'help.qa.tools_h': 3,
+        'help.relations.boundary_h': 3,
         'help.relations.edit_relation_h': 3,
         'help.relations.maintain_relation_h': 3,
-        'help.relations.relation_types_h': 2,
         'help.relations.multipolygon_h': 3,
-        'help.relations.turn_restriction_h': 3,
+        'help.relations.relation_types_h': 2,
         'help.relations.route_h': 3,
-        'help.relations.boundary_h': 3,
-        'help.notes.add_note_h': 3,
-        'help.notes.update_note_h': 3,
-        'help.notes.save_note_h': 3,
-        'help.imagery.sources_h': 3,
-        'help.imagery.offsets_h': 3,
-        'help.streetlevel.using_h': 3,
-        'help.gps.using_h': 3,
-        'help.qa.tools_h': 3,
-        'help.qa.issues_h': 3
+        'help.relations.turn_restriction_h': 3,
+        'help.streetlevel.using_h': 3
     };
 
     // For each section, squash all the texts into a single markdown document
@@ -242,12 +262,13 @@ export function uiPaneHelp(context) {
             var subkey = helpkey + '.' + part;
             var depth = headings[subkey];                              // is this subkey a heading?
             var hhh = depth ? Array(depth + 1).join('#') + ' ' : '';   // if so, prepend with some ##'s
-            return all + hhh + helpString(subkey, helpPaneReplacements) + '\n\n';
+            return all + hhh + helpHtml(subkey, helpPaneReplacements) + '\n\n';
         }, '');
 
         return {
-            title: t(helpkey + '.title'),
-            html: marked(text.trim())
+            title: t.addOrUpdate(helpkey + '.title'),
+            _title: t(helpkey + '.title'),
+            content: marked(text.trim())
                 // use keyboard key styling for shortcuts
                 .replace(/<code>/g, '<kbd>')
                 .replace(/<\/code>/g, '<\/kbd>')
@@ -256,25 +277,26 @@ export function uiPaneHelp(context) {
 
     var helpPane = uiPane('help', context)
         .key(t('help.key'))
-        .title(t('help.title'))
-        .description(t('help.title'))
+        .label(t.append('help.title'))
+        .description(t.append('help.title'))
         .iconName('iD-icon-help');
 
     helpPane.renderContent = function(content) {
 
         function clickHelp(d, i) {
+
             var rtl = (localizer.textDirection() === 'rtl');
             content.property('scrollTop', 0);
-            helpPane.selection().select('.pane-heading h2').html(d.title);
+            helpPane.selection().select('.pane-heading h2').call(d.title);
 
-            body.html(d.html);
+            body.html(d.content);
             body.selectAll('a')
                 .attr('target', '_blank');
             menuItems.classed('selected', function(m) {
-                return m.title === d.title;
+                return m._title === d._title;
             });
 
-            nav.html('');
+            nav.text('');
             if (rtl) {
                 nav.call(drawNext).call(drawPrevious);
             } else {
@@ -286,14 +308,16 @@ export function uiPaneHelp(context) {
                 if (i < docs.length - 1) {
                     var nextLink = selection
                         .append('a')
+                        .attr('href', '#')
                         .attr('class', 'next')
-                        .on('click', function() {
+                        .on('click', function(d3_event) {
+                            d3_event.preventDefault();
                             clickHelp(docs[i + 1], i + 1);
                         });
 
                     nextLink
                         .append('span')
-                        .text(docs[i + 1].title)
+                        .call(docs[i + 1].title)
                         .call(svgIcon((rtl ? '#iD-icon-backward' : '#iD-icon-forward'), 'inline'));
                 }
             }
@@ -303,29 +327,33 @@ export function uiPaneHelp(context) {
                 if (i > 0) {
                     var prevLink = selection
                         .append('a')
+                        .attr('href', '#')
                         .attr('class', 'previous')
-                        .on('click', function() {
+                        .on('click', function(d3_event) {
+                            d3_event.preventDefault();
                             clickHelp(docs[i - 1], i - 1);
                         });
 
                     prevLink
                         .call(svgIcon((rtl ? '#iD-icon-forward' : '#iD-icon-backward'), 'inline'))
                         .append('span')
-                        .text(docs[i - 1].title);
+                        .call(docs[i - 1].title);
                 }
             }
         }
 
 
-        function clickWalkthrough() {
+        function clickWalkthrough(d3_event) {
+            d3_event.preventDefault();
             if (context.inIntro()) return;
             context.container().call(uiIntro(context));
             context.ui().togglePanes();
         }
 
 
-        function clickShortcuts() {
-            context.container().call(uiShortcuts(context), true);
+        function clickShortcuts(d3_event) {
+            d3_event.preventDefault();
+            context.container().call(context.ui().shortcuts, true);
         }
 
         var toc = content
@@ -337,28 +365,37 @@ export function uiPaneHelp(context) {
             .enter()
             .append('li')
             .append('a')
-            .html(function(d) { return d.title; })
-            .on('click', clickHelp);
+            .attr('role', 'button')
+            .attr('href', '#')
+            .each(function(d) {
+                d3_select(this).call(d.title);
+            })
+            .on('click', function(d3_event, d) {
+                d3_event.preventDefault();
+                clickHelp(d, docs.indexOf(d));
+            });
 
         var shortcuts = toc
             .append('li')
             .attr('class', 'shortcuts')
             .call(uiTooltip()
-                .title(t('shortcuts.tooltip'))
+                .title(() => t.append('shortcuts.tooltip'))
                 .keys(['?'])
                 .placement('top')
             )
             .append('a')
+            .attr('href', '#')
             .on('click', clickShortcuts);
 
         shortcuts
             .append('div')
-            .text(t('shortcuts.title'));
+            .call(t.append('shortcuts.title'));
 
         var walkthrough = toc
             .append('li')
             .attr('class', 'walkthrough')
             .append('a')
+            .attr('href', '#')
             .on('click', clickWalkthrough);
 
         walkthrough
@@ -369,7 +406,7 @@ export function uiPaneHelp(context) {
 
         walkthrough
             .append('div')
-            .text(t('splash.walkthrough'));
+            .call(t.append('splash.walkthrough'));
 
 
         var helpContent = content
@@ -385,7 +422,6 @@ export function uiPaneHelp(context) {
             .attr('class', 'nav');
 
         clickHelp(docs[0], 0);
-
     };
 
     return helpPane;

@@ -1,5 +1,5 @@
 import { geoPath as d3_geoPath } from 'd3-geo';
-import { event as d3_event, select as d3_select } from 'd3-selection';
+import { select as d3_select } from 'd3-selection';
 import { zoom as d3_zoom, zoomIdentity as d3_zoomIdentity } from 'd3-zoom';
 
 import { t } from '../core/localizer';
@@ -13,7 +13,8 @@ import { utilSetTransform } from '../util';
 export function uiMapInMap(context) {
 
     function mapInMap(selection) {
-        var backgroundLayer = rendererTileLayer(context);
+        var backgroundLayer = rendererTileLayer(context)
+            .underzoom(2);
         var overlayLayers = {};
         var projection = geoRawMercator();
         var dataLayer = svgData(projection, context).showLabels(false);
@@ -42,12 +43,13 @@ export function uiMapInMap(context) {
 
         function zoomStarted() {
             if (_skipEvents) return;
-            _tStart = _tCurr = projection.transform();
+            _tCurr = projection.transform();
+            _tStart = _tCurr;
             _gesture = null;
         }
 
 
-        function zoomed() {
+        function zoomed(d3_event) {
             if (_skipEvents) return;
 
             var x = d3_event.transform.x;
@@ -204,7 +206,7 @@ export function uiMapInMap(context) {
             overlays.exit()
                 .remove();
 
-            overlays = overlays.enter()
+            overlays.enter()
                 .append('div')
                 .merge(overlays)
                 .each(function(layer) { d3_select(this).call(layer); });
@@ -217,7 +219,7 @@ export function uiMapInMap(context) {
             dataLayers.exit()
                 .remove();
 
-            dataLayers = dataLayers.enter()
+            dataLayers.enter()
                 .append('svg')
                 .attr('class', 'map-in-map-data')
                 .merge(dataLayers)
@@ -258,7 +260,7 @@ export function uiMapInMap(context) {
         }
 
 
-        function toggle() {
+        function toggle(d3_event) {
             if (d3_event) d3_event.preventDefault();
 
             _isHidden = !_isHidden;

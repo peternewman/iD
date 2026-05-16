@@ -30,7 +30,7 @@ export function uiNoteReport() {
 
         linkEnter
             .append('span')
-            .text(t('note.report'));
+            .call(t.append('note.report'));
     }
 
 
